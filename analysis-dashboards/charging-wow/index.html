@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Charging Team WoW Analysis - AI Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #0a1628 100%);
+            color: #ffffff;
+        }
+
+        .header {
+            background: #00A9E0;
+            padding: 40px 60px;
+            box-shadow: 0 10px 40px rgba(0, 169, 224, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .header .subtitle {
+            font-size: 18px;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header .ai-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 20px;
+            border-radius: 20px;
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .dashboard {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 40px 60px;
+        }
+
+        .executive-summary {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .summary-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #00A9E0;
+            text-align: center;
+        }
+
+        .summary-writeup {
+            text-align: center;
+            font-size: 15px;
+            line-height: 1.7;
+            opacity: 0.85;
+            max-width: 900px;
+            margin: 0 auto 25px auto;
+        }
+
+        .metrics-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .key-metric {
+            background: rgba(0, 169, 224, 0.1);
+            padding: 20px 30px;
+            border-radius: 15px;
+            border-left: 4px solid #00A9E0;
+        }
+
+        .metric-value {
+            font-size: 36px;
+            font-weight: 800;
+            color: #00A9E0;
+            display: block;
+        }
+
+        .metric-label {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .insights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .insight-card {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .insight-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #00A9E0 0%, #40C7FB 100%);
+        }
+
+        .insight-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .impact-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .impact-HIGH { background: #f56565; }
+        .impact-CRITICAL { background: #fc8181; animation: critical-pulse 2s infinite; }
+        .impact-MEDIUM { background: #ed8936; }
+        .impact-OPPORTUNITY { background: #00DB84; }
+
+        @keyframes critical-pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(252, 129, 129, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(252, 129, 129, 0.8); }
+        }
+
+        .insight-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #e2e8f0;
+        }
+
+        .insight-description {
+            font-size: 15px;
+            line-height: 1.6;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        .insight-recommendation {
+            font-size: 14px;
+            padding: 15px;
+            background: rgba(0, 169, 224, 0.1);
+            border-radius: 10px;
+            border-left: 3px solid #00A9E0;
+        }
+
+        .chart-container {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .chart-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #e2e8f0;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 500px;
+        }
+
+        .sankey-wrapper {
+            width: 100%;
+            min-height: 500px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 1200px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+
+        .account-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .account-table th {
+            background: rgba(0, 169, 224, 0.2);
+            padding: 15px;
+            text-align: left;
+            font-weight: 700;
+            border-bottom: 2px solid #00A9E0;
+        }
+
+        .account-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .account-table tr:hover {
+            background: rgba(0, 169, 224, 0.1);
+        }
+
+        .account-table .comment-cell {
+            font-size: 12px;
+            max-width: 250px;
+            line-height: 1.5;
+            opacity: 0.85;
+            text-align: left;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+
+        .positive { color: #00DB84; font-weight: 600; }
+        .negative { color: #f56565; font-weight: 600; }
+
+        .sankey-link {
+            fill: none;
+            stroke-opacity: 0.4;
+            cursor: pointer;
+            transition: stroke-opacity 0.3s;
+        }
+
+        .sankey-link:hover {
+            stroke-opacity: 0.8;
+        }
+
+        .sankey-node rect {
+            fill: #007a99;
+            stroke: #00A9E0;
+            stroke-width: 2px;
+            cursor: pointer;
+            transition: fill 0.3s;
+        }
+
+        .sankey-node rect:hover {
+            fill: #40C7FB;
+        }
+
+        .sankey-node text {
+            fill: #e2e8f0;
+            font-size: 14px;
+            font-weight: 600;
+            pointer-events: none;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(26, 32, 44, 0.95);
+            color: #e2e8f0;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #00A9E0;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .sankey-legend {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(0, 169, 224, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #00A9E0;
+        }
+
+        .sankey-legend h4 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #00A9E0;
+        }
+
+        .sankey-legend p {
+            font-size: 14px;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+
+        .sku-filter-wrapper {
+            margin-bottom: 20px;
+        }
+
+        .sku-filter-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 169, 224, 0.4);
+            background: rgba(26, 32, 44, 0.8);
+            color: #e2e8f0;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .sku-filter-input::placeholder {
+            color: rgba(226, 232, 240, 0.5);
+        }
+
+        .sku-filter-input:focus {
+            border-color: #00A9E0;
+            box-shadow: 0 0 0 3px rgba(0, 169, 224, 0.2);
+        }
+
+        .sku-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .sku-table th {
+            background: rgba(0, 169, 224, 0.2);
+            padding: 13px 12px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 13px;
+            border-bottom: 2px solid #00A9E0;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .sku-table th:hover {
+            background: rgba(0, 169, 224, 0.35);
+        }
+
+        .sku-table th .sort-arrow {
+            margin-left: 4px;
+            opacity: 0.3;
+            font-size: 11px;
+        }
+
+        .sku-table th.sort-active .sort-arrow {
+            opacity: 1;
+        }
+
+        .sku-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 13px;
+        }
+
+        .sku-table tr:hover {
+            background: rgba(0, 169, 224, 0.1);
+        }
+
+        .sku-table .sku-code {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            color: #a0aec0;
+        }
+
+        .sku-table .product-name {
+            max-width: 220px;
+            white-space: normal;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+        .sku-table .customer-name {
+            white-space: nowrap;
+        }
+
+        .sku-category-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .cat-Essential { background: rgba(0, 219, 132, 0.2); color: #00DB84; }
+        .cat-Wireless { background: rgba(0, 169, 224, 0.2); color: #00A9E0; }
+        .cat-AnkerPrime { background: rgba(0, 169, 224, 0.2); color: #40C7FB; }
+        .cat-DataNewAccessories { background: rgba(237, 137, 54, 0.2); color: #ed8936; }
+        .cat-ChargingStation { background: rgba(64, 199, 251, 0.2); color: #40C7FB; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Charging Team WoW Analysis</h1>
+        <div class="subtitle">WK05 Week-over-Week Forecast Change Analysis</div>
+        <div class="ai-badge">Generated with Advanced ML Analytics | February 10, 2026</div>
+    </div>
+
+    <div class="dashboard">
+        <div class="executive-summary">
+            <div class="summary-title">Executive Summary</div>
+            <p class="summary-writeup">WK05 forecast changes reflect a net positive shift across the Charging portfolio. Key drivers include the Amazon Kindle wireless charger NPI ramp, continued sell-through strength at Target and Walmart, and timing adjustments on select launches. C2 Wireless forecast temporarily reduced pending pricing finalization; TD Synnex Q3 allocation under review.</p>
+            <div class="metrics-row">
+                <div class="key-metric">
+                    <span class="metric-value">$3.3M</span>
+                    <span class="metric-label">Total Absolute FC Change</span>
+                </div>
+                <div class="key-metric">
+                    <span class="metric-value">11</span>
+                    <span class="metric-label">Accounts Analyzed</span>
+                </div>
+                <div class="key-metric">
+                    <span class="metric-value">30</span>
+                    <span class="metric-label">Top SKUs Tracked</span>
+                </div>
+                <div class="key-metric">
+                    <span class="metric-value">7</span>
+                    <span class="metric-label">Product Categories</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="insights-grid">
+            <div class="insight-card">
+                <div class="impact-badge impact-HIGH">HIGH</div>
+                <div class="insight-title">Wireless Category Surge</div>
+                <div class="insight-description">$1.17M forecast increase driven by Amazon Kindle wireless charger NPI added to forecast</div>
+                <div class="insight-recommendation">Recommendation: Monitor Kindle program sell-through and adjust RR accordingly</div>
+            </div>
+
+            <div class="insight-card">
+                <div class="impact-badge impact-OPPORTUNITY">OPPORTUNITY</div>
+                <div class="insight-title">Target & Walmart Growth</div>
+                <div class="insight-description">Combined $1.29M positive FC change; RR increased across Essential and AnkerPrime categories</div>
+                <div class="insight-recommendation">Recommendation: Validate sell-through supports increased RR; monitor WOS levels</div>
+            </div>
+
+            <div class="insight-card">
+                <div class="impact-badge impact-MEDIUM">MEDIUM</div>
+                <div class="insight-title">TD Synnex Q3 Allocation Risk</div>
+                <div class="insight-description">$274K negative Q3 forecast reduction from allocation change; nets to -$220K annually</div>
+                <div class="insight-recommendation">Recommendation: Engage TD Synnex on allocation recovery; monitor for forecast add-back</div>
+            </div>
+
+            <div class="insight-card">
+                <div class="impact-badge impact-CRITICAL">CRITICAL</div>
+                <div class="insight-title">C2 Wireless Pricing Hold</div>
+                <div class="insight-description">$219K forecast removed pending pricing finalization; expected to be added back to forecast</div>
+                <div class="insight-recommendation">Recommendation: Expedite pricing approval; forecast to be restored once pricing is finalized</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Account-Level Forecast Change WoW</div>
+            <table class="account-table">
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Q1 FC Change</th>
+                        <th>Q2 FC Change</th>
+                        <th>Q3 FC Change</th>
+                        <th>Q4 FC Change</th>
+                        <th>2026 Total</th>
+                        <th>Comment</th>
+                    </tr>
+                </thead>
+                <tbody id="accountTableBody"></tbody>
+            </table>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Forecast Change Flow (Categories to Quarters)</div>
+            <svg id="sankeyChart" class="sankey-wrapper"></svg>
+            <div class="sankey-legend">
+                <h4>How to Read This Diagram</h4>
+                <p><strong>Left side:</strong> Product categories (Essential, Wireless, AnkerPrime, etc.)<br>
+                <strong>Right side:</strong> Quarters (Q1, Q2, Q3, Q4)<br>
+                <strong>Flows (lines):</strong> Width shows forecast change magnitude. <span style="color: #00DB84; font-weight: 600;">Green flows</span> = forecast increase, <span style="color: #f56565; font-weight: 600;">Red flows</span> = forecast decrease.<br>
+                <strong>Tip:</strong> Wider flows = larger forecast changes. Hover over any flow to see exact dollar amounts.</p>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="chart-container">
+                <div class="chart-title">Forecast Change by Category & Quarter</div>
+                <div class="chart-wrapper">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">Quarterly Forecast Change Waterfall</div>
+                <div class="chart-wrapper">
+                    <canvas id="waterfallChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Top SKU Forecast Changes - Week over Week</div>
+            <div class="sku-filter-wrapper">
+                <input type="text" id="skuFilter" class="sku-filter-input" placeholder="Filter by SKU, Product, or Customer...">
+            </div>
+            <table class="sku-table">
+                <thead>
+                    <tr>
+                        <th data-key="SKU" data-type="string">SKU <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Product" data-type="string">Product <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Customer" data-type="string">Customer <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Category" data-type="string">Category <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Q1" data-type="number">Q1 Rev <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Q2" data-type="number">Q2 Rev <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Q3" data-type="number">Q3 Rev <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Q4" data-type="number">Q4 Rev <span class="sort-arrow">&#9650;</span></th>
+                        <th data-key="Total" data-type="number">Total Rev <span class="sort-arrow">&#9650;</span></th>
+                        <th>Comment</th>
+                    </tr>
+                </thead>
+                <tbody id="skuTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================
+        // DATA
+        // =====================================================
+
+        const categoryData = [
+            {"category": "Essential", "Q1": 485000, "Q2": 72000, "Q3": 91000, "Q4": 83000},
+            {"category": "Wireless", "Q1": 415000, "Q2": 463000, "Q3": 288000, "Q4": 9000},
+            {"category": "AnkerPrime", "Q1": 373000, "Q2": 104000, "Q3": 99000, "Q4": 105000},
+            {"category": "Data New Accessories", "Q1": 82000, "Q2": -33000, "Q3": -17000, "Q4": 21000},
+            {"category": "Charging Station", "Q1": 47000, "Q2": 12000, "Q3": 34000, "Q4": 34000},
+            {"category": "Battery", "Q1": 0, "Q2": 0, "Q3": 0, "Q4": 0},
+            {"category": "Charger", "Q1": 0, "Q2": 0, "Q3": 0, "Q4": 0}
+        ];
+
+        const accountData = [
+            {"Customer": "Best Buy", "Q1": 24282, "Q2": 43702, "Q3": 27472, "Q4": 87850, "Yearly": 183306, "Comment": ""},
+            {"Customer": "Walmart", "Q1": -236742, "Q2": 354761, "Q3": 109696, "Q4": 393411, "Yearly": 621127, "Comment": "Timing shift: A2039 launch moved from Q1 to Q3; pushed into July with other Summer deliveries"},
+            {"Customer": "Micro Center", "Q1": 156607, "Q2": 16485, "Q3": 3926, "Q4": 13804, "Yearly": 190822, "Comment": ""},
+            {"Customer": "Target", "Q1": 341936, "Q2": 128997, "Q3": 94037, "Q4": 107392, "Yearly": 672362, "Comment": ""},
+            {"Customer": "TD Synnex", "Q1": 12189, "Q2": 41902, "Q3": -274159, "Q4": 0, "Yearly": -220069, "Comment": ""},
+            {"Customer": "Amazon Vendor (MFA US)", "Q1": 153450, "Q2": 396000, "Q3": 182160, "Q4": 0, "Yearly": 731610, "Comment": ""},
+            {"Customer": "ROSS", "Q1": -44375, "Q2": -68346, "Q3": -749, "Q4": 0, "Yearly": -113469, "Comment": ""},
+            {"Customer": "C2 Wireless", "Q1": 57930, "Q2": -85170, "Q3": -106386, "Q4": -85170, "Yearly": -218796, "Comment": "Holding RR; monitoring pricing finalization - revenue to be added back"},
+            {"Customer": "Apple CN", "Q1": -65084, "Q2": -164, "Q3": -2004, "Q4": 1672, "Yearly": -65580, "Comment": ""},
+            {"Customer": "Cesium Telecom", "Q1": -48910, "Q2": 41060, "Q3": 123776, "Q4": 0, "Yearly": 115926, "Comment": ""},
+            {"Customer": "CMS (Apple) US", "Q1": -62523, "Q2": -221, "Q3": -57907, "Q4": -39438, "Yearly": -160088, "Comment": ""}
+        ];
+
+        const skuData = [
+            {"SKU":"Y1822J15","Product":"Wireless Charging Stand for Kindle","Customer":"Amazon","Category":"Wireless","Q1":118800,"Q2":396000,"Q3":182160,"Q4":0,"Total":696960},
+            {"SKU":"A1664H11-1","Product":"MagGo Power Bank (10K, Magnetic Wireless)","Customer":"Target","Category":"AnkerPrime","Q1":51661,"Q2":60515,"Q3":52818,"Q4":60646,"Total":225641},
+            {"SKU":"A1339111-1","Product":"Prime Power Bank (65W, Fusion)","Customer":"Best Buy","Category":"AnkerPrime","Q1":34864,"Q2":34081,"Q3":36876,"Q4":43972,"Total":149794},
+            {"SKU":"B2519JF1","Product":"PowerWave II Sense Pad","Customer":"Target","Category":"Wireless","Q1":116318,"Q2":5213,"Q3":0,"Q4":0,"Total":121531},
+            {"SKU":"A2639J21-1","Product":"Anker 313 Charger White","Customer":"C2 Wireless","Category":"Essential","Q1":120000,"Q2":0,"Q3":0,"Q4":0,"Total":120000},
+            {"SKU":"Y1822G15","Product":"Wireless Charging Stand for Kindle (EU)","Customer":"Amazon EU","Category":"Wireless","Q1":44352,"Q2":33264,"Q3":41580,"Q4":0,"Total":119196},
+            {"SKU":"B2335J22-1","Product":"323 Charger (32W) 6ft c-l bundle","Customer":"Best Buy","Category":"Essential","Q1":11021,"Q2":29083,"Q3":31910,"Q4":40691,"Total":112705},
+            {"SKU":"A81B6H21-1","Product":"Braided USB-C to Lightning Cable (6ft)","Customer":"Walmart","Category":"Essential","Q1":25758,"Q2":25591,"Q3":28116,"Q4":26399,"Total":105864},
+            {"SKU":"A9215H11","Product":"Charging Station","Customer":"In Motion","Category":"Charging Station","Q1":13000,"Q2":11960,"Q3":33800,"Q4":33800,"Total":92560},
+            {"SKU":"A1339111-1","Product":"Prime Power Bank (65W, Fusion)","Customer":"Target","Category":"AnkerPrime","Q1":86494,"Q2":0,"Q3":0,"Q4":0,"Total":86494},
+            {"SKU":"Y1822V15","Product":"Wireless Charging Stand for Kindle (UK)","Customer":"Amazon UK","Category":"Wireless","Q1":42876,"Q2":0,"Q3":34301,"Q4":0,"Total":77177},
+            {"SKU":"B2548JF1-1","Product":"318 Wireless Charger Pad w/ Adapter","Customer":"Lynco Distribution","Category":"Wireless","Q1":25800,"Q2":26553,"Q3":21500,"Q4":0,"Total":73853},
+            {"SKU":"A8357JA1","Product":"USB-C Display Hub (4-in-1, 10Gbps)","Customer":"Target","Category":"Data New Accessories","Q1":61889,"Q2":0,"Q3":0,"Q4":0,"Total":61889},
+            {"SKU":"A110EH11-1","Product":"321 Power Bank","Customer":"Best Buy","Category":"Essential","Q1":59686,"Q2":0,"Q3":0,"Q4":0,"Total":59686},
+            {"SKU":"A1667G21","Product":"MagGo Power Bank (5K, Slim) White","Customer":"Apple Italy","Category":"AnkerPrime","Q1":55914,"Q2":0,"Q3":0,"Q4":0,"Total":55914},
+            {"SKU":"B2326J21-1","Product":"323 Charger (32W) w/ 6ft c-c cable","Customer":"Walmart","Category":"Essential","Q1":13942,"Q2":8157,"Q3":17171,"Q4":16119,"Total":55390},
+            {"SKU":"A1384H11-1","Product":"Power Bank (20K, 30W)","Customer":"Best Buy","Category":"Essential","Q1":50000,"Q2":0,"Q3":0,"Q4":0,"Total":50000},
+            {"SKU":"A2732HF1-1","Product":"Car Charger 2PT USBC 20W","Customer":"Walmart","Category":"Wireless","Q1":24543,"Q2":7810,"Q3":8149,"Q4":8499,"Total":49001},
+            {"SKU":"A110EH11-1","Product":"321 Power Bank","Customer":"Target","Category":"Essential","Q1":48985,"Q2":0,"Q3":0,"Q4":0,"Total":48985},
+            {"SKU":"A1667G21","Product":"MagGo Power Bank (5K, Slim) White","Customer":"Apple Italy","Category":"AnkerPrime","Q1":37724,"Q2":0,"Q3":0,"Q4":0,"Total":37724},
+            {"SKU":"A1112H11-1","Product":"321 Power Bank","Customer":"Target","Category":"Essential","Q1":23745,"Q2":3156,"Q3":0,"Q4":0,"Total":26901},
+            {"SKU":"A1384H11-1","Product":"Power Bank (20K, 30W)","Customer":"Target","Category":"Essential","Q1":36344,"Q2":0,"Q3":0,"Q4":0,"Total":36344},
+            {"SKU":"Y1822X15","Product":"Wireless Charging Stand","Customer":"Amazon","Category":"Wireless","Q1":34650,"Q2":0,"Q3":0,"Q4":0,"Total":34650},
+            {"SKU":"A1680H11-1","Product":"Power Bank (10K, 30W, Built-In Cables)","Customer":"Walmart","Category":"Essential","Q1":25366,"Q2":0,"Q3":0,"Q4":0,"Total":25366},
+            {"SKU":"A2154J21-1","Product":"Charger (112W, 6 Ports)","Customer":"Walmart","Category":"Charging Station","Q1":28852,"Q2":0,"Q3":0,"Q4":0,"Total":28852},
+            {"SKU":"A83B31A1","Product":"Data Hub","Customer":"Micro Center","Category":"Data New Accessories","Q1":19950,"Q2":7800,"Q3":1050,"Q4":0,"Total":28800},
+            {"SKU":"A81H6H11-1","Product":"322 USB-A to USB-C Cable (6ft Braided)","Customer":"Walmart","Category":"Essential","Q1":27997,"Q2":0,"Q3":0,"Q4":0,"Total":27997},
+            {"SKU":"A1638H11-1","Product":"Power Bank (30W, Fusion, Built-In Cable)","Customer":"Target","Category":"AnkerPrime","Q1":25981,"Q2":1640,"Q3":0,"Q4":0,"Total":27621},
+            {"SKU":"A1259H11-1","Product":"Power Bank","Customer":"Cesium Telecom","Category":"AnkerPrime","Q1":10886,"Q2":8247,"Q3":9896,"Q4":0,"Total":29029},
+            {"SKU":"A8013H12-1","Product":"Lightning USB 6FT Cable","Customer":"Walmart","Category":"Essential","Q1":25250,"Q2":0,"Q3":0,"Q4":0,"Total":25250,"Comment":""},
+            {"SKU":"A2039J21-1","Product":"523 Charger (Nano Pro) White","Customer":"Walmart","Category":"Essential","Q1":-276366,"Q2":-140663,"Q3":-83062,"Q4":0,"Total":-500091,"Comment":"Timing shift: A2039 launch moved from Q1 to Q3; pushed into July with other Summer deliveries"},
+            {"SKU":"A2698J21-1","Product":"Prime Charger (200W, 6 Ports, GaN)","Customer":"C2 Wireless","Category":"Essential","Q1":-63852,"Q2":-85170,"Q3":-106386,"Q4":-85170,"Total":-340578,"Comment":"Holding RR; monitoring pricing finalization - revenue to be added back"}
+        ];
+
+        // =====================================================
+        // ACCOUNT TABLE
+        // =====================================================
+
+        const tbody = document.getElementById('accountTableBody');
+        accountData.forEach(acc => {
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td><strong>${acc.Customer}</strong></td>
+                <td class="${acc.Q1 >= 0 ? 'positive' : 'negative'}">$${acc.Q1.toLocaleString()}</td>
+                <td class="${acc.Q2 >= 0 ? 'positive' : 'negative'}">$${acc.Q2.toLocaleString()}</td>
+                <td class="${acc.Q3 >= 0 ? 'positive' : 'negative'}">$${acc.Q3.toLocaleString()}</td>
+                <td class="${acc.Q4 >= 0 ? 'positive' : 'negative'}">$${acc.Q4.toLocaleString()}</td>
+                <td class="${acc.Yearly >= 0 ? 'positive' : 'negative'}"><strong>$${acc.Yearly.toLocaleString()}</strong></td>
+                <td class="comment-cell">${acc.Comment}</td>
+            `;
+        });
+
+        // Add totals row
+        const totalQ1 = accountData.reduce((sum, acc) => sum + acc.Q1, 0);
+        const totalQ2 = accountData.reduce((sum, acc) => sum + acc.Q2, 0);
+        const totalQ3 = accountData.reduce((sum, acc) => sum + acc.Q3, 0);
+        const totalQ4 = accountData.reduce((sum, acc) => sum + acc.Q4, 0);
+        const totalYearly = accountData.reduce((sum, acc) => sum + acc.Yearly, 0);
+
+        const totalRow = tbody.insertRow();
+        totalRow.style.borderTop = '3px solid #00A9E0';
+        totalRow.style.background = 'rgba(0, 169, 224, 0.15)';
+        totalRow.innerHTML = `
+            <td><strong style="font-size: 15px;">TOTAL (All Accounts)</strong></td>
+            <td class="${totalQ1 >= 0 ? 'positive' : 'negative'}" style="font-size: 15px;"><strong>$${totalQ1.toLocaleString()}</strong></td>
+            <td class="${totalQ2 >= 0 ? 'positive' : 'negative'}" style="font-size: 15px;"><strong>$${totalQ2.toLocaleString()}</strong></td>
+            <td class="${totalQ3 >= 0 ? 'positive' : 'negative'}" style="font-size: 15px;"><strong>$${totalQ3.toLocaleString()}</strong></td>
+            <td class="${totalQ4 >= 0 ? 'positive' : 'negative'}" style="font-size: 15px;"><strong>$${totalQ4.toLocaleString()}</strong></td>
+            <td class="${totalYearly >= 0 ? 'positive' : 'negative'}" style="font-size: 16px;"><strong>$${totalYearly.toLocaleString()}</strong></td>
+            <td class="comment-cell"></td>
+        `;
+
+        // =====================================================
+        // SKU TABLE
+        // =====================================================
+
+        function getCategoryClass(cat) {
+            return 'cat-' + cat.replace(/\s+/g, '');
+        }
+
+        function formatRevenue(val) {
+            if (val === 0) return '<span style="opacity: 0.4;">$0</span>';
+            const cls = val >= 0 ? 'positive' : 'negative';
+            return `<span class="${cls}">$${val.toLocaleString()}</span>`;
+        }
+
+        function renderSkuTable(data) {
+            const skuBody = document.getElementById('skuTableBody');
+            skuBody.innerHTML = '';
+            data.forEach(sku => {
+                const row = skuBody.insertRow();
+                row.innerHTML = `
+                    <td class="sku-code">${sku.SKU}</td>
+                    <td class="product-name">${sku.Product}</td>
+                    <td class="customer-name">${sku.Customer}</td>
+                    <td><span class="sku-category-badge ${getCategoryClass(sku.Category)}">${sku.Category}</span></td>
+                    <td>${formatRevenue(sku.Q1)}</td>
+                    <td>${formatRevenue(sku.Q2)}</td>
+                    <td>${formatRevenue(sku.Q3)}</td>
+                    <td>${formatRevenue(sku.Q4)}</td>
+                    <td class="${sku.Total >= 0 ? 'positive' : 'negative'}"><strong>$${sku.Total.toLocaleString()}</strong></td>
+                    <td class="comment-cell">${sku.Comment || ''}</td>
+                `;
+            });
+        }
+
+        let currentSort = { key: null, asc: true };
+        let currentFiltered = skuData;
+
+        function getDisplayData() {
+            const query = document.getElementById('skuFilter').value.toLowerCase().trim();
+            let data = query ? skuData.filter(sku =>
+                sku.SKU.toLowerCase().includes(query) ||
+                sku.Product.toLowerCase().includes(query) ||
+                sku.Customer.toLowerCase().includes(query)
+            ) : [...skuData];
+
+            if (currentSort.key) {
+                const key = currentSort.key;
+                const asc = currentSort.asc;
+                const type = document.querySelector(`th[data-key="${key}"]`)?.dataset.type || 'string';
+                data.sort((a, b) => {
+                    let va = a[key], vb = b[key];
+                    if (type === 'number') return asc ? va - vb : vb - va;
+                    va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+                    return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+                });
+            }
+            return data;
+        }
+
+        renderSkuTable(skuData);
+
+        // SKU filter
+        document.getElementById('skuFilter').addEventListener('input', function() {
+            renderSkuTable(getDisplayData());
+        });
+
+        // SKU sort
+        document.querySelectorAll('.sku-table th[data-key]').forEach(th => {
+            th.addEventListener('click', function() {
+                const key = this.dataset.key;
+                if (currentSort.key === key) {
+                    currentSort.asc = !currentSort.asc;
+                } else {
+                    currentSort.key = key;
+                    currentSort.asc = true;
+                }
+                document.querySelectorAll('.sku-table th').forEach(h => h.classList.remove('sort-active'));
+                this.classList.add('sort-active');
+                this.querySelector('.sort-arrow').innerHTML = currentSort.asc ? '&#9650;' : '&#9660;';
+                document.querySelectorAll('.sku-table th[data-key]:not(.sort-active) .sort-arrow').forEach(a => a.innerHTML = '&#9650;');
+                renderSkuTable(getDisplayData());
+            });
+        });
+
+        // =====================================================
+        // CATEGORY CHART
+        // =====================================================
+
+        const ctxCategory = document.getElementById('categoryChart').getContext('2d');
+        new Chart(ctxCategory, {
+            type: 'bar',
+            data: {
+                labels: categoryData.map(d => d.category),
+                datasets: [
+                    {label: 'Q1 2026', data: categoryData.map(d => d.Q1), backgroundColor: '#00A9E0'},
+                    {label: 'Q2 2026', data: categoryData.map(d => d.Q2), backgroundColor: '#007a99'},
+                    {label: 'Q3 2026', data: categoryData.map(d => d.Q3), backgroundColor: '#40C7FB'},
+                    {label: 'Q4 2026', data: categoryData.map(d => d.Q4), backgroundColor: '#40C7FB'}
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {position: 'top', labels: {color: '#e2e8f0', font: {size: 12}}}
+                },
+                scales: {
+                    x: {
+                        grid: {color: 'rgba(255,255,255,0.1)'},
+                        ticks: {color: '#e2e8f0', callback: v => '$' + (v/1000).toFixed(0) + 'K'}
+                    },
+                    y: {
+                        grid: {color: 'rgba(255,255,255,0.1)'},
+                        ticks: {color: '#e2e8f0', font: {size: 13, weight: '600'}}
+                    }
+                }
+            }
+        });
+
+        // =====================================================
+        // WATERFALL CHART
+        // =====================================================
+
+        const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+        const qValues = quarters.map((q, i) =>
+            categoryData.reduce((sum, cat) => sum + cat['Q' + (i+1)], 0)
+        );
+
+        const ctxWaterfall = document.getElementById('waterfallChart').getContext('2d');
+        new Chart(ctxWaterfall, {
+            type: 'bar',
+            data: {
+                labels: quarters,
+                datasets: [{
+                    label: 'Forecast Change',
+                    data: qValues,
+                    backgroundColor: qValues.map(v => v >= 0 ? '#00DB84' : '#f56565')
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {legend: {display: false}},
+                scales: {
+                    x: {grid: {color: 'rgba(255,255,255,0.1)'}, ticks: {color: '#e2e8f0', font: {size: 14}}},
+                    y: {grid: {color: 'rgba(255,255,255,0.1)'}, ticks: {color: '#e2e8f0', callback: v => '$' + (v/1000).toFixed(0) + 'K'}}
+                }
+            }
+        });
+
+        // =====================================================
+        // SANKEY DIAGRAM
+        // =====================================================
+
+        const sankeyNodes = [...categoryData.map(d => d.category), 'Q1', 'Q2', 'Q3', 'Q4'];
+        const sankeyLinks = [];
+        const nodeIndex = {};
+        sankeyNodes.forEach((n, i) => nodeIndex[n] = i);
+
+        categoryData.forEach(cat => {
+            ['Q1', 'Q2', 'Q3', 'Q4'].forEach(q => {
+                const value = Math.abs(cat[q]);
+                if (value > 1000) {
+                    sankeyLinks.push({
+                        source: nodeIndex[cat.category],
+                        target: nodeIndex[q],
+                        value: value,
+                        categoryName: cat.category,
+                        quarter: q,
+                        originalValue: cat[q]
+                    });
+                }
+            });
+        });
+
+        const svg = d3.select("#sankeyChart");
+        const width = svg.node().getBoundingClientRect().width || 1200;
+        const height = 500;
+
+        svg.attr("width", width).attr("height", height);
+
+        const sankey = d3.sankey()
+            .nodeWidth(15)
+            .nodePadding(30)
+            .extent([[40, 10], [width - 40, height - 10]]);
+
+        const graph = {
+            nodes: sankeyNodes.map(d => ({name: d})),
+            links: sankeyLinks.map(d => Object.assign({}, d))
+        };
+
+        sankey(graph);
+
+        // Create tooltip
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Add interactive links with tooltips and color coding
+        svg.append("g")
+            .selectAll("path")
+            .data(graph.links)
+            .join("path")
+            .attr("class", "sankey-link")
+            .attr("d", d3.sankeyLinkHorizontal())
+            .attr("stroke", d => d.originalValue >= 0 ? '#00DB84' : '#f56565')
+            .attr("stroke-width", d => Math.max(1, d.width))
+            .on("mouseover", function(event, d) {
+                d3.select(this).style("stroke-opacity", 0.8);
+                const sign = d.originalValue >= 0 ? '+' : '';
+                const color = d.originalValue >= 0 ? '#00DB84' : '#f56565';
+                tooltip.style("opacity", 1)
+                    .html(`
+                        <strong>${d.categoryName} &rarr; ${d.quarter}</strong><br>
+                        <span style="color: ${color}; font-size: 16px; font-weight: 700;">
+                            ${sign}$${d.originalValue.toLocaleString()}
+                        </span>
+                    `);
+            })
+            .on("mousemove", function(event) {
+                tooltip
+                    .style("left", (event.pageX + 15) + "px")
+                    .style("top", (event.pageY - 10) + "px");
+            })
+            .on("mouseout", function() {
+                d3.select(this).style("stroke-opacity", 0.3);
+                tooltip.style("opacity", 0);
+            });
+
+        const node = svg.append("g")
+            .selectAll("g")
+            .data(graph.nodes)
+            .join("g")
+            .attr("class", "sankey-node");
+
+        node.append("rect")
+            .attr("x", d => d.x0)
+            .attr("y", d => d.y0)
+            .attr("height", d => d.y1 - d.y0)
+            .attr("width", d => d.x1 - d.x0);
+
+        node.append("text")
+            .attr("x", d => d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6)
+            .attr("y", d => (d.y1 + d.y0) / 2)
+            .attr("dy", "0.35em")
+            .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
+            .text(d => d.name);
+
+        console.log('Dashboard loaded successfully with interactive Sankey!');
+    </script>
+</body>
+</html>
