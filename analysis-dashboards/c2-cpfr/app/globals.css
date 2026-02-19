@@ -186,7 +186,7 @@ body {
    ============================================================ */
 .table-scroll-container {
   max-height: 70vh;
-  overflow-y: auto;
+  overflow: auto;
   border-radius: 12px;
   border: 1px solid var(--border-faint);
   position: relative;
@@ -194,6 +194,7 @@ body {
 
 .table-scroll-container::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 .table-scroll-container::-webkit-scrollbar-track {
   background: rgba(255,255,255,0.03);
@@ -207,7 +208,6 @@ body {
 }
 
 .table-wrapper {
-  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 

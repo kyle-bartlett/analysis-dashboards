@@ -497,8 +497,6 @@ function SortableHeader({
 function ChangeLogSection({ entries }: { entries: ChangeLogEntry[] }) {
   const [expanded, setExpanded] = useState(false);
 
-  if (entries.length === 0) return null;
-
   return (
     <div className="card">
       <button
@@ -509,7 +507,7 @@ function ChangeLogSection({ entries }: { entries: ChangeLogEntry[] }) {
           📋 Change Log
         </h2>
         <span className="text-[var(--text-muted)] text-sm">
-          {expanded ? '▾ Collapse' : '▸ Expand'} · {entries.length} entries
+          {expanded ? '▾ Collapse' : '▸ Expand'} · {entries.length === 0 ? 'No entries yet' : `${entries.length} entries`}
         </span>
       </button>
 
@@ -1130,15 +1128,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ACCEPT BUTTONS (only in dual mode with discrepancies) */}
-        {isDualMode && data.discrepancies.length > 0 && (
-          <div className="card mb-9">
+        {/* ACCEPT BUTTONS — always shown */}
+        <div className="card mb-9">
             <h2 className="text-2xl font-bold text-[var(--anker-blue)] mb-4">
-              ⚡ Forecast Discrepancies
+              ⚡ Forecast Sync
             </h2>
             <p className="text-sm text-[var(--text-muted)] mb-5">
-              {data.discrepancies.length} discrepancies found between Anker and
-              C2 forecasts. Review and accept to align.
+              {isDualMode && data.discrepancies.length > 0
+                ? `${data.discrepancies.length} discrepancies found between Anker and C2 forecasts. Review and accept to align.`
+                : 'Accept the other side\'s forecast numbers when ready. Changes are logged and auditable.'}
             </p>
             <div className="flex flex-wrap gap-4">
               <button
@@ -1175,7 +1173,6 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-        )}
 
         {/* KPI CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-9">
