@@ -615,6 +615,7 @@ export default function Dashboard() {
   // Sort & filter state
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [showDiscrepanciesOnly, setShowDiscrepanciesOnly] = useState(false);
   const [filterState, setFilterState] = useState<FilterState>({
     textFilters: {},
     numericFilters: {},
@@ -940,6 +941,12 @@ export default function Dashboard() {
       return true;
     });
 
+    // 2.5 Discrepancy-only filter
+    if (showDiscrepanciesOnly && data.discrepancies) {
+      const discSkus = new Set(data.discrepancies.map((d: { sku: string }) => d.sku));
+      filtered = filtered.filter((s) => discSkus.has(s.sku));
+    }
+
     // 3. Sort
     let sorted = [...filtered];
     if (sortKey && sortDir) {
@@ -957,7 +964,7 @@ export default function Dashboard() {
     }
 
     return { filtered: sorted, weekColumns };
-  }, [data, activeFilter, searchTerm, sortKey, sortDir, filterState]);
+  }, [data, activeFilter, searchTerm, sortKey, sortDir, filterState, showDiscrepanciesOnly]);
 
   // ---------------------------------------------------------------------------
   // Loading state
@@ -1288,6 +1295,21 @@ export default function Dashboard() {
                 {cat === 'all' ? 'All' : cat}
               </button>
             ))}
+            <button
+              onClick={() => setShowDiscrepanciesOnly(!showDiscrepanciesOnly)}
+              className={`px-5 py-2.5 rounded-xl border text-sm font-semibold cursor-pointer transition-all ${
+                showDiscrepanciesOnly
+                  ? 'bg-[rgba(237,137,54,0.25)] border-[var(--orange)] text-[var(--orange)]'
+                  : 'bg-[rgba(237,137,54,0.08)] border-[rgba(237,137,54,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(237,137,54,0.2)] hover:border-[var(--orange)]'
+              }`}
+            >
+              ⚡ {showDiscrepanciesOnly ? 'Discrepancies Only' : 'Show Discrepancies'}
+              {discrepancyMap.size > 0 && (
+                <span className="ml-2 bg-[var(--orange)] text-white text-xs px-1.5 py-0.5 rounded-full">
+                  {new Set([...discrepancyMap.keys()].map(k => k.split('|')[0])).size}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Scroll hint */}
