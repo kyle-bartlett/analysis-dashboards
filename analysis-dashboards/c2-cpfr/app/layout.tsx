@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'C2W & VC Charging CPFR — Shared Forecast Dashboard',
+  title: 'C2W Charging CPFR — Shared Forecast Dashboard',
   description: 'Collaborative Planning, Forecasting & Replenishment Dashboard',
 };
 
