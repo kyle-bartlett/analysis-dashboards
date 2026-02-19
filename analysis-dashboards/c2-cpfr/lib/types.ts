@@ -33,8 +33,11 @@ export interface ForecastResponse {
     totalSkus: number;
     totalUnits: number;
     categories: string[];
-    weekColumns: string[];
-    mode: 'dual' | 'single'; // single = only Anker data
+    weekColumns: string[];       // W+0, W+1, etc.
+    weekLabels?: string[];       // Original header text (202606, 202607, etc.)
+    mode: 'dual' | 'single';    // single = only Anker data
+    columnMapping?: Record<string, number>; // Discovered column positions
+    warnings?: string[];         // Any column mapping warnings
   };
 }
 

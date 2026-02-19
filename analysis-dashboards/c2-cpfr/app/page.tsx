@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import type { ForecastResponse, SkuForecast, ChangeLogEntry } from '@/lib/types';
 
 // =============================================================================
@@ -14,14 +14,12 @@ const CAT_COLORS: Record<string, string> = {
   Charger: '#f56565',
 };
 
-const REFRESH_INTERVAL =
-  typeof window !== 'undefined'
-    ? parseInt(
-        (window as unknown as Record<string, string>)
-          .NEXT_PUBLIC_REFRESH_INTERVAL || '300000',
-        10
-      )
-    : 300000;
+const REFRESH_OPTIONS = [
+  { label: '1 min', value: 60000 },
+  { label: '5 min', value: 300000 },
+  { label: '15 min', value: 900000 },
+  { label: '30 min', value: 1800000 },
+];
 
 // =============================================================================
 // TOAST COMPONENT
@@ -51,10 +49,88 @@ function Toast({
 }
 
 // =============================================================================
+// CONFIRMATION MODAL
+// =============================================================================
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  confirmColor,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmColor: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="modal-content" style={{ maxWidth: 440 }}>
+        <h2 className="text-xl font-bold text-[var(--text-secondary)] mb-3">{title}</h2>
+        <p className="text-sm text-[var(--text-muted)] mb-6 leading-relaxed">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-xl border border-[rgba(255,255,255,0.15)] text-[var(--text-muted)] text-sm font-semibold hover:bg-[rgba(255,255,255,0.05)] transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="accept-btn px-6 py-2.5 rounded-xl text-white text-sm font-bold cursor-pointer"
+            style={{ background: confirmColor }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // SETTINGS MODAL
 // =============================================================================
-function SettingsModal({ onClose }: { onClose: () => void }) {
-  const [refreshMin, setRefreshMin] = useState(5);
+function SettingsModal({
+  onClose,
+  refreshInterval,
+  onRefreshChange,
+}: {
+  onClose: () => void;
+  refreshInterval: number;
+  onRefreshChange: (ms: number) => void;
+}) {
+  const [autoAcceptC2, setAutoAcceptC2] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('cpfr-auto-accept-c2') === 'true'
+      : false
+  );
+  const [autoAcceptAnker, setAutoAcceptAnker] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('cpfr-auto-accept-anker') === 'true'
+      : false
+  );
+  const [alertEmail, setAlertEmail] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('cpfr-alert-email') || ''
+      : ''
+  );
+  const [webhookUrl, setWebhookUrl] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('cpfr-webhook-url') || ''
+      : ''
+  );
+
+  const save = () => {
+    localStorage.setItem('cpfr-auto-accept-c2', String(autoAcceptC2));
+    localStorage.setItem('cpfr-auto-accept-anker', String(autoAcceptAnker));
+    localStorage.setItem('cpfr-alert-email', alertEmail);
+    localStorage.setItem('cpfr-webhook-url', webhookUrl);
+    onClose();
+  };
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -65,95 +141,353 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </h2>
           <button
             onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-white transition-colors text-2xl leading-none"
+            className="text-[var(--text-muted)] hover:text-white transition-colors text-2xl leading-none cursor-pointer"
           >
             ×
           </button>
         </div>
 
         <div className="space-y-6">
-          {/* Auto-refresh */}
+          {/* Auto-accept toggles */}
           <div>
-            <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">
-              Auto-Refresh Interval
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={1}
-                max={30}
-                value={refreshMin}
-                onChange={(e) => setRefreshMin(parseInt(e.target.value))}
-                className="flex-1 accent-[var(--anker-blue)]"
-              />
-              <span className="text-sm text-[var(--text-muted)] w-16 text-right">
-                {refreshMin} min
-              </span>
-            </div>
-          </div>
-
-          {/* Alert preferences */}
-          <div>
-            <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">
-              Alert Preferences
+            <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-3">
+              Auto-Accept Rules
             </label>
             <div className="space-y-3">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  defaultChecked
-                  className="w-4 h-4 accent-[var(--anker-blue)] rounded"
+                  checked={autoAcceptC2}
+                  onChange={(e) => setAutoAcceptC2(e.target.checked)}
+                  className="w-4 h-4 accent-[var(--orange)] rounded"
                 />
                 <span className="text-sm text-[var(--text-muted)]">
-                  Email alerts on forecast changes
+                  Automatically accept C2&apos;s updates
                 </span>
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={autoAcceptAnker}
+                  onChange={(e) => setAutoAcceptAnker(e.target.checked)}
                   className="w-4 h-4 accent-[var(--anker-blue)] rounded"
                 />
                 <span className="text-sm text-[var(--text-muted)]">
-                  Slack/webhook notifications
+                  Automatically accept Anker&apos;s updates
                 </span>
               </label>
             </div>
           </div>
 
+          {/* Refresh interval */}
+          <div>
+            <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">
+              Auto-Refresh Interval
+            </label>
+            <div className="flex gap-2">
+              {REFRESH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => onRefreshChange(opt.value)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all ${
+                    refreshInterval === opt.value
+                      ? 'bg-[var(--anker-blue)] text-white'
+                      : 'bg-[rgba(0,169,224,0.1)] text-[var(--text-muted)] border border-[rgba(0,169,224,0.2)] hover:bg-[rgba(0,169,224,0.2)]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Alert email */}
+          <div>
+            <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">
+              Alert Email
+            </label>
+            <input
+              type="email"
+              placeholder="alerts@company.com"
+              value={alertEmail}
+              onChange={(e) => setAlertEmail(e.target.value)}
+              className="settings-input"
+            />
+          </div>
+
           {/* Webhook URL */}
           <div>
             <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">
-              Webhook URL (Slack/Teams)
+              Slack / Teams Webhook URL
             </label>
             <input
               type="url"
               placeholder="https://hooks.slack.com/..."
-              className="w-full px-4 py-2.5 rounded-xl border border-[rgba(0,169,224,0.3)] bg-[rgba(26,32,44,0.8)] text-[var(--text-secondary)] text-sm outline-none focus:border-[var(--anker-blue)] focus:ring-2 focus:ring-[rgba(0,169,224,0.15)] transition-all"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+              className="settings-input"
             />
           </div>
 
           {/* Data source info */}
           <div className="bg-[rgba(0,169,224,0.06)] rounded-xl p-4 border border-[rgba(0,169,224,0.15)]">
             <p className="text-xs text-[var(--text-dim)]">
-              📊 Data Source: Google Sheets API
+              📊 Data Source: Google Sheets API (Dynamic Column Mapping)
               <br />
-              🔄 Next refresh in: {refreshMin} minutes
+              🔄 Refresh: every {REFRESH_OPTIONS.find((o) => o.value === refreshInterval)?.label || '5 min'}
               <br />
-              📍 Mode: Single-source (Anker only)
+              📍 Columns discovered automatically from header row
             </p>
           </div>
         </div>
 
         <div className="mt-6 flex justify-end">
           <button
-            onClick={onClose}
-            className="px-6 py-2.5 rounded-xl bg-[var(--anker-blue)] text-white font-semibold text-sm hover:bg-[var(--anker-blue-light)] transition-colors"
+            onClick={save}
+            className="px-6 py-2.5 rounded-xl bg-[var(--anker-blue)] text-white font-semibold text-sm hover:bg-[var(--anker-blue-light)] transition-colors cursor-pointer"
           >
             Save & Close
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+// =============================================================================
+// FILTER DROPDOWN
+// =============================================================================
+type SortDir = 'asc' | 'desc' | null;
+
+interface FilterState {
+  // Text column filters: set of allowed values
+  textFilters: Record<string, Set<string>>;
+  // Numeric column filters: { min, max }
+  numericFilters: Record<string, { min: number | null; max: number | null }>;
+}
+
+function ColumnFilterDropdown({
+  columnKey,
+  isNumeric,
+  uniqueValues,
+  filterState,
+  onApply,
+  onClose,
+}: {
+  columnKey: string;
+  isNumeric: boolean;
+  uniqueValues: string[];
+  filterState: FilterState;
+  onApply: (state: FilterState) => void;
+  onClose: () => void;
+}) {
+  const [localTextSet, setLocalTextSet] = useState<Set<string>>(() => {
+    return filterState.textFilters[columnKey]
+      ? new Set(filterState.textFilters[columnKey])
+      : new Set(uniqueValues);
+  });
+  const [localMin, setLocalMin] = useState<string>(() => {
+    const f = filterState.numericFilters[columnKey];
+    return f?.min !== null && f?.min !== undefined ? String(f.min) : '';
+  });
+  const [localMax, setLocalMax] = useState<string>(() => {
+    const f = filterState.numericFilters[columnKey];
+    return f?.max !== null && f?.max !== undefined ? String(f.max) : '';
+  });
+
+  const apply = () => {
+    const newState = { ...filterState };
+    if (isNumeric) {
+      newState.numericFilters = { ...newState.numericFilters };
+      const min = localMin ? parseFloat(localMin) : null;
+      const max = localMax ? parseFloat(localMax) : null;
+      if (min === null && max === null) {
+        delete newState.numericFilters[columnKey];
+      } else {
+        newState.numericFilters[columnKey] = { min, max };
+      }
+    } else {
+      newState.textFilters = { ...newState.textFilters };
+      if (localTextSet.size === uniqueValues.length) {
+        delete newState.textFilters[columnKey];
+      } else {
+        newState.textFilters[columnKey] = new Set(localTextSet);
+      }
+    }
+    onApply(newState);
+    onClose();
+  };
+
+  const clear = () => {
+    const newState = { ...filterState };
+    if (isNumeric) {
+      newState.numericFilters = { ...newState.numericFilters };
+      delete newState.numericFilters[columnKey];
+    } else {
+      newState.textFilters = { ...newState.textFilters };
+      delete newState.textFilters[columnKey];
+    }
+    onApply(newState);
+    onClose();
+  };
+
+  return (
+    <div className="filter-dropdown" onClick={(e) => e.stopPropagation()}>
+      {isNumeric ? (
+        <div className="space-y-3">
+          <div className="text-xs text-[var(--text-dim)] font-semibold uppercase tracking-wider">
+            Range Filter
+          </div>
+          <div className="flex gap-2 items-center">
+            <input
+              type="number"
+              placeholder="Min"
+              value={localMin}
+              onChange={(e) => setLocalMin(e.target.value)}
+              className="filter-range-input"
+            />
+            <span className="text-[var(--text-dim)]">—</span>
+            <input
+              type="number"
+              placeholder="Max"
+              value={localMax}
+              onChange={(e) => setLocalMax(e.target.value)}
+              className="filter-range-input"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="text-xs text-[var(--text-dim)] font-semibold uppercase tracking-wider mb-2">
+            Select Values
+          </div>
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => setLocalTextSet(new Set(uniqueValues))}
+              className="text-xs text-[var(--anker-blue)] hover:underline cursor-pointer"
+            >
+              All
+            </button>
+            <button
+              onClick={() => setLocalTextSet(new Set())}
+              className="text-xs text-[var(--anker-blue)] hover:underline cursor-pointer"
+            >
+              None
+            </button>
+          </div>
+          <div className="filter-checkbox-list">
+            {uniqueValues.map((v) => (
+              <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
+                <input
+                  type="checkbox"
+                  checked={localTextSet.has(v)}
+                  onChange={(e) => {
+                    const next = new Set(localTextSet);
+                    if (e.target.checked) next.add(v);
+                    else next.delete(v);
+                    setLocalTextSet(next);
+                  }}
+                  className="w-3.5 h-3.5 accent-[var(--anker-blue)] rounded"
+                />
+                <span className="text-xs text-[var(--text-muted)] truncate">{v}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex justify-between mt-3 pt-3 border-t border-[rgba(255,255,255,0.08)]">
+        <button
+          onClick={clear}
+          className="text-xs text-[var(--text-dim)] hover:text-[var(--text-muted)] cursor-pointer"
+        >
+          Clear
+        </button>
+        <button
+          onClick={apply}
+          className="text-xs bg-[var(--anker-blue)] text-white px-3 py-1 rounded-md font-semibold cursor-pointer hover:bg-[var(--anker-blue-light)] transition-colors"
+        >
+          Apply
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// SORTABLE TABLE HEADER
+// =============================================================================
+function SortableHeader({
+  label,
+  columnKey,
+  sortKey,
+  sortDir,
+  onSort,
+  isNumeric,
+  uniqueValues,
+  filterState,
+  onFilterApply,
+  className,
+  style,
+}: {
+  label: string;
+  columnKey: string;
+  sortKey: string | null;
+  sortDir: SortDir;
+  onSort: (key: string) => void;
+  isNumeric: boolean;
+  uniqueValues: string[];
+  filterState: FilterState;
+  onFilterApply: (state: FilterState) => void;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [showFilter, setShowFilter] = useState(false);
+
+  const isActive = sortKey === columnKey;
+  const hasFilter = isNumeric
+    ? !!filterState.numericFilters[columnKey]
+    : !!filterState.textFilters[columnKey];
+
+  return (
+    <th className={className} style={style}>
+      <div className="th-inner">
+        <button
+          className="sort-btn cursor-pointer"
+          onClick={() => onSort(columnKey)}
+          title={`Sort by ${label}`}
+        >
+          <span className="th-label">{label}</span>
+          <span className={`sort-indicator ${isActive ? 'active' : ''}`}>
+            {isActive && sortDir === 'asc' && '▲'}
+            {isActive && sortDir === 'desc' && '▼'}
+            {!isActive && '⇅'}
+          </span>
+        </button>
+        <button
+          className={`filter-btn cursor-pointer ${hasFilter ? 'has-filter' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowFilter(!showFilter);
+          }}
+          title="Filter"
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+            <path d="M0 1h10L6 5.5V9L4 10V5.5L0 1z" />
+          </svg>
+          {hasFilter && <span className="filter-dot" />}
+        </button>
+        {showFilter && (
+          <ColumnFilterDropdown
+            columnKey={columnKey}
+            isNumeric={isNumeric}
+            uniqueValues={uniqueValues}
+            filterState={filterState}
+            onApply={onFilterApply}
+            onClose={() => setShowFilter(false)}
+          />
+        )}
+      </div>
+    </th>
   );
 }
 
@@ -169,7 +503,7 @@ function ChangeLogSection({ entries }: { entries: ChangeLogEntry[] }) {
     <div className="card">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between text-left"
+        className="w-full flex items-center justify-between text-left cursor-pointer"
       >
         <h2 className="text-2xl font-bold text-[var(--anker-blue)]">
           📋 Change Log
@@ -182,10 +516,7 @@ function ChangeLogSection({ entries }: { entries: ChangeLogEntry[] }) {
       {expanded && (
         <div className="mt-5 space-y-0">
           {entries.map((e) => (
-            <div
-              key={e.id}
-              className={`changelog-entry action-${e.action}`}
-            >
+            <div key={e.id} className={`changelog-entry action-${e.action}`}>
               <div className="flex items-center gap-3 mb-1">
                 <span className="text-sm font-bold text-[var(--text-secondary)]">
                   {e.actor}
@@ -214,6 +545,45 @@ function ChangeLogSection({ entries }: { entries: ChangeLogEntry[] }) {
 }
 
 // =============================================================================
+// HELPER: Get unique values for a column across all skus
+// =============================================================================
+function getUniqueValues(
+  skus: SkuForecast[],
+  accessor: (s: SkuForecast) => string | number
+): string[] {
+  const set = new Set<string>();
+  for (const s of skus) {
+    const v = accessor(s);
+    if (v !== undefined && v !== null && v !== '') set.add(String(v));
+  }
+  return [...set].sort();
+}
+
+// =============================================================================
+// HELPER: Sort comparator
+// =============================================================================
+function getSortValue(
+  sku: SkuForecast,
+  key: string
+): string | number {
+  switch (key) {
+    case 'sku': return sku.sku;
+    case 'customer': return sku.customer;
+    case 'price': return sku.price;
+    case 'q1': return sku.q1;
+    case 'q2': return sku.q2;
+    case 'q3': return sku.q3;
+    case 'q4': return sku.q4;
+    case 'oh': return sku.oh;
+    case 'wos': return sku.wos;
+    case 'totalOfc': return sku.totalOfc;
+    default:
+      if (key.startsWith('W+')) return sku.weeks[key] || 0;
+      return 0;
+  }
+}
+
+// =============================================================================
 // MAIN DASHBOARD PAGE
 // =============================================================================
 export default function Dashboard() {
@@ -229,6 +599,29 @@ export default function Dashboard() {
   } | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [newChangesCount, setNewChangesCount] = useState(0);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    confirmColor: string;
+    onConfirm: () => void;
+  } | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cpfr-refresh-interval');
+      return saved ? parseInt(saved, 10) : 300000;
+    }
+    return 300000;
+  });
+
+  // Sort & filter state
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [filterState, setFilterState] = useState<FilterState>({
+    textFilters: {},
+    numericFilters: {},
+  });
+
   const chartWeeklyRef = useRef<HTMLCanvasElement>(null);
   const chartQuarterlyRef = useRef<HTMLCanvasElement>(null);
   const chartsInitialized = useRef(false);
@@ -249,7 +642,6 @@ export default function Dashboard() {
       setData(forecast);
       setChanges(changesData.entries || []);
 
-      // Check for new changes since last visit
       const lastVisit = localStorage.getItem('cpfr-last-visit');
       if (lastVisit && changesData.entries) {
         const newCount = changesData.entries.filter(
@@ -268,18 +660,29 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, REFRESH_INTERVAL);
+    const interval = setInterval(fetchData, refreshInterval);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, refreshInterval]);
+
+  // Close filter dropdowns when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.filter-dropdown') && !target.closest('.filter-btn')) {
+        // The dropdown close is handled by state in SortableHeader
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
   // ---------------------------------------------------------------------------
-  // Charts (Chart.js loaded from CDN)
+  // Charts
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!data || chartsInitialized.current) return;
 
     const loadCharts = async () => {
-      // Dynamic import of Chart.js from CDN
       if (!(window as unknown as Record<string, unknown>).Chart) {
         const script = document.createElement('script');
         script.src =
@@ -299,10 +702,11 @@ export default function Dashboard() {
       };
 
       const skus = data.anker.data;
-      const WEEKS = data.meta.weekColumns.length || 30;
       const weekLabels = data.meta.weekColumns;
+      const WEEKS = weekLabels.length || 30;
+      // Use weekLabels from metadata for display if available
+      const displayLabels = data.meta.weekLabels || weekLabels;
 
-      // Weekly forecast by category (stacked area)
       if (chartWeeklyRef.current) {
         const ctx = chartWeeklyRef.current.getContext('2d');
         if (ctx) {
@@ -327,7 +731,7 @@ export default function Dashboard() {
 
           new Chart(ctx, {
             type: 'line',
-            data: { labels: weekLabels, datasets },
+            data: { labels: displayLabels, datasets },
             options: {
               responsive: true,
               maintainAspectRatio: false,
@@ -368,7 +772,6 @@ export default function Dashboard() {
         }
       }
 
-      // Quarterly bar chart
       if (chartQuarterlyRef.current) {
         const ctx = chartQuarterlyRef.current.getContext('2d');
         if (ctx) {
@@ -437,21 +840,43 @@ export default function Dashboard() {
   }, [data]);
 
   // ---------------------------------------------------------------------------
+  // Sort handler (3-click cycle: asc → desc → reset)
+  // ---------------------------------------------------------------------------
+  const handleSort = useCallback(
+    (key: string) => {
+      if (sortKey !== key) {
+        setSortKey(key);
+        setSortDir('asc');
+      } else if (sortDir === 'asc') {
+        setSortDir('desc');
+      } else {
+        setSortKey(null);
+        setSortDir(null);
+      }
+    },
+    [sortKey, sortDir]
+  );
+
+  // ---------------------------------------------------------------------------
   // Accept handler
   // ---------------------------------------------------------------------------
-  const handleAccept = async (direction: 'anker_accepts_c2' | 'c2_accepts_anker') => {
+  const handleAccept = async (
+    direction: 'anker_accepts_c2' | 'c2_accepts_anker',
+    scope: 'all' | 'sku' = 'all',
+    sku?: string
+  ) => {
     setAccepting(true);
     try {
       const res = await fetch('/api/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ direction, scope: 'all' }),
+        body: JSON.stringify({ direction, scope, sku }),
       });
       const result = await res.json();
 
       if (result.success) {
         showToast(result.message, 'success');
-        fetchData(); // Refresh
+        fetchData();
       } else {
         showToast('Accept failed: ' + (result.error || 'Unknown error'), 'error');
       }
@@ -459,6 +884,7 @@ export default function Dashboard() {
       showToast('Network error — could not accept forecast', 'error');
     } finally {
       setAccepting(false);
+      setConfirmModal(null);
     }
   };
 
@@ -466,10 +892,79 @@ export default function Dashboard() {
     setToast({ message, type });
   };
 
+  const handleRefreshChange = (ms: number) => {
+    setRefreshInterval(ms);
+    localStorage.setItem('cpfr-refresh-interval', String(ms));
+  };
+
   // ---------------------------------------------------------------------------
-  // Computed values
+  // Computed / memoized values
   // ---------------------------------------------------------------------------
-  if (loading || !data) {
+  const processedData = useMemo(() => {
+    if (!data) return null;
+
+    const skus = data.anker.data;
+    const weekColumns = data.meta.weekColumns;
+
+    // 1. Category + search filter
+    let filtered = skus.filter((s) => {
+      if (activeFilter !== 'all' && s.category !== activeFilter) return false;
+      if (searchTerm) {
+        const t = searchTerm.toLowerCase();
+        return (
+          s.sku.toLowerCase().includes(t) ||
+          s.customer.toLowerCase().includes(t) ||
+          (s.description || '').toLowerCase().includes(t) ||
+          s.category.toLowerCase().includes(t)
+        );
+      }
+      return true;
+    });
+
+    // 2. Apply column filters
+    filtered = filtered.filter((s) => {
+      // Text filters
+      for (const [key, allowedSet] of Object.entries(filterState.textFilters)) {
+        let val: string;
+        if (key === 'sku') val = s.sku;
+        else if (key === 'customer') val = s.customer;
+        else continue;
+        if (!allowedSet.has(val)) return false;
+      }
+      // Numeric filters
+      for (const [key, range] of Object.entries(filterState.numericFilters)) {
+        const val = getSortValue(s, key);
+        if (typeof val === 'number') {
+          if (range.min !== null && val < range.min) return false;
+          if (range.max !== null && val > range.max) return false;
+        }
+      }
+      return true;
+    });
+
+    // 3. Sort
+    let sorted = [...filtered];
+    if (sortKey && sortDir) {
+      sorted.sort((a, b) => {
+        const aVal = getSortValue(a, sortKey);
+        const bVal = getSortValue(b, sortKey);
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          return sortDir === 'asc'
+            ? aVal.localeCompare(bVal)
+            : bVal.localeCompare(aVal);
+        }
+        const diff = (aVal as number) - (bVal as number);
+        return sortDir === 'asc' ? diff : -diff;
+      });
+    }
+
+    return { filtered: sorted, weekColumns };
+  }, [data, activeFilter, searchTerm, sortKey, sortDir, filterState]);
+
+  // ---------------------------------------------------------------------------
+  // Loading state
+  // ---------------------------------------------------------------------------
+  if (loading || !data || !processedData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -491,7 +986,7 @@ export default function Dashboard() {
         )
       : 0;
 
-  const weekColumns = data.meta.weekColumns;
+  const { filtered, weekColumns } = processedData;
   const isDualMode = data.meta.mode === 'dual';
   const discrepancyMap = new Map<string, number>();
   if (data.discrepancies) {
@@ -500,22 +995,9 @@ export default function Dashboard() {
     }
   }
 
-  // Filtered SKUs
-  const filterSkus = (items: SkuForecast[]) => {
-    return items.filter((s) => {
-      if (activeFilter !== 'all' && s.category !== activeFilter) return false;
-      if (searchTerm) {
-        const t = searchTerm.toLowerCase();
-        return (
-          s.sku.toLowerCase().includes(t) ||
-          s.customer.toLowerCase().includes(t) ||
-          (s.description || '').toLowerCase().includes(t) ||
-          s.category.toLowerCase().includes(t)
-        );
-      }
-      return true;
-    });
-  };
+  // Unique values for filter dropdowns
+  const uniqueSkus = getUniqueValues(skus, (s) => s.sku);
+  const uniqueCustomers = getUniqueValues(skus, (s) => s.customer);
 
   // Status dot color based on time difference
   const getStatusColor = (dateStr: string) => {
@@ -527,14 +1009,27 @@ export default function Dashboard() {
     return 'red';
   };
 
+  // Check if a SKU row has any discrepancies
+  const skuHasDiscrepancy = (sku: string) => {
+    for (const [key] of discrepancyMap) {
+      if (key.startsWith(sku + '|')) return true;
+    }
+    return false;
+  };
+
+  // Display labels for weekly columns
+  const weekDisplayLabels = data.meta.weekLabels || weekColumns;
+
   return (
     <>
       {/* HEADER */}
       <div className="header">
         <div className="relative z-10 flex justify-between items-center flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl lg:text-[44px] font-extrabold tracking-tight"
-              style={{ textShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+            <h1
+              className="text-4xl lg:text-[44px] font-extrabold tracking-tight"
+              style={{ textShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
+            >
               C2W &amp; VC Charging CPFR
             </h1>
             <p className="text-base lg:text-lg opacity-95 mt-1.5">
@@ -545,7 +1040,8 @@ export default function Dashboard() {
             <div className="flex items-center gap-3">
               {newChangesCount > 0 && (
                 <span className="changes-badge">
-                  🔔 {newChangesCount} new change{newChangesCount > 1 ? 's' : ''}
+                  🔔 {newChangesCount} new change
+                  {newChangesCount > 1 ? 's' : ''}
                 </span>
               )}
               <span className="inline-block bg-white/20 px-5 py-2 rounded-2xl text-sm font-semibold backdrop-blur-lg border border-white/30">
@@ -576,9 +1072,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-9">
           <div className="update-card anker">
             <div className="flex items-center gap-3 mb-3.5">
-              <div
-                className={`status-dot ${getStatusColor(data.anker.lastModified)}`}
-              />
+              <div className={`status-dot ${getStatusColor(data.anker.lastModified)}`} />
               <span className="text-lg font-bold text-[var(--text-secondary)]">
                 Anker (Kyle Bartlett)
               </span>
@@ -597,7 +1091,8 @@ export default function Dashboard() {
               </strong>
             </p>
             <div className="text-xs leading-relaxed text-[var(--text-muted)] bg-[rgba(0,169,224,0.08)] p-2.5 px-3.5 rounded-lg border-l-[3px] border-l-[rgba(0,169,224,0.4)]">
-              Updated forecast quantities for Essential SKUs; adjusted sell-through estimates based on latest POS data.
+              Updated forecast quantities for Essential SKUs; adjusted
+              sell-through estimates based on latest POS data.
             </div>
           </div>
 
@@ -605,9 +1100,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-3 mb-3.5">
               <div
                 className={`status-dot ${
-                  data.c2
-                    ? getStatusColor(data.c2.lastModified)
-                    : 'yellow'
+                  data.c2 ? getStatusColor(data.c2.lastModified) : 'yellow'
                 }`}
               />
               <span className="text-lg font-bold text-[var(--text-secondary)]">
@@ -644,23 +1137,41 @@ export default function Dashboard() {
               ⚡ Forecast Discrepancies
             </h2>
             <p className="text-sm text-[var(--text-muted)] mb-5">
-              {data.discrepancies.length} discrepancies found between Anker and C2 forecasts.
-              Review and accept to align.
+              {data.discrepancies.length} discrepancies found between Anker and
+              C2 forecasts. Review and accept to align.
             </p>
             <div className="flex flex-wrap gap-4">
               <button
-                onClick={() => handleAccept('anker_accepts_c2')}
+                onClick={() =>
+                  setConfirmModal({
+                    title: "Accept C2's Numbers",
+                    message:
+                      "This will overwrite Anker's forecast values with C2's numbers for all discrepant cells. This action is logged and cannot be undone automatically.",
+                    confirmLabel: "Accept C2's Numbers",
+                    confirmColor: 'var(--orange)',
+                    onConfirm: () => handleAccept('anker_accepts_c2'),
+                  })
+                }
                 disabled={accepting}
-                className="accept-btn px-8 py-3.5 rounded-xl bg-[var(--anker-blue)] text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="accept-btn accept-btn-c2 px-8 py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {accepting ? '⏳ Processing...' : '✓ Accept C2\'s Numbers'}
+                {accepting ? '⏳ Processing...' : "✓ Accept C2's Numbers"}
               </button>
               <button
-                onClick={() => handleAccept('c2_accepts_anker')}
+                onClick={() =>
+                  setConfirmModal({
+                    title: "Accept Anker's Numbers",
+                    message:
+                      "This will overwrite C2's forecast values with Anker's numbers for all discrepant cells. This action is logged and cannot be undone automatically.",
+                    confirmLabel: "Accept Anker's Numbers",
+                    confirmColor: 'var(--anker-blue)',
+                    onConfirm: () => handleAccept('c2_accepts_anker'),
+                  })
+                }
                 disabled={accepting}
-                className="accept-btn px-8 py-3.5 rounded-xl bg-[var(--orange)] text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="accept-btn accept-btn-anker px-8 py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {accepting ? '⏳ Processing...' : '✓ Accept Anker\'s Numbers'}
+                {accepting ? '⏳ Processing...' : "✓ Accept Anker's Numbers"}
               </button>
             </div>
           </div>
@@ -753,7 +1264,7 @@ export default function Dashboard() {
         </div>
 
         {/* MAIN TABLE */}
-        <div className="card">
+        <div className="card" style={{ padding: '35px 35px 20px' }}>
           <h2 className="text-2xl font-bold text-[var(--anker-blue)] mb-5">
             CPFR Forecast Detail
           </h2>
@@ -786,230 +1297,270 @@ export default function Dashboard() {
           <div className="text-right text-xs text-[var(--text-faint)] mb-2">
             Scroll right for weekly columns →{' '}
             <span className="text-[var(--anker-blue)]">
-              W+0 … W+{weekColumns.length - 1}
+              {weekDisplayLabels[0]} … {weekDisplayLabels[weekDisplayLabels.length - 1]}
+            </span>
+            <span className="text-[var(--text-dim)] ml-3">
+              {filtered.length} of {skus.length} rows
             </span>
           </div>
 
-          {/* Table */}
-          <div className="table-wrapper">
-            <table className="cpfr-table">
-              <thead>
-                <tr>
-                  <th className="sticky-col col-sku">Anker SKU</th>
-                  <th className="sticky-col col-cust">Customer</th>
-                  <th className="sticky-col col-price">Price</th>
-                  <th className="qt-col">Q1</th>
-                  <th className="qt-col">Q2</th>
-                  <th className="qt-col">Q3</th>
-                  <th className="qt-col">Q4</th>
-                  <th>OH</th>
-                  <th>WOS</th>
-                  <th className="section-divider">Total OFC</th>
-                  {weekColumns.map((w) => (
-                    <th key={w} className="week-cell">
-                      {w}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {CATEGORIES.map((cat) => {
-                  const items = filterSkus(
-                    skus.filter((s) => s.category === cat)
-                  );
-                  if (items.length === 0) return null;
+          {/* Table with independent scroll */}
+          <div className="table-scroll-container">
+            <div className="table-wrapper">
+              <table className="cpfr-table">
+                <thead>
+                  <tr>
+                    <SortableHeader
+                      label="Anker SKU"
+                      columnKey="sku"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={false}
+                      uniqueValues={uniqueSkus}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="sticky-col col-sku"
+                    />
+                    <SortableHeader
+                      label="Customer"
+                      columnKey="customer"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={false}
+                      uniqueValues={uniqueCustomers}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="sticky-col col-cust"
+                    />
+                    <SortableHeader
+                      label="Price"
+                      columnKey="price"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="sticky-col col-price"
+                    />
+                    <SortableHeader
+                      label="Q1"
+                      columnKey="q1"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="qt-col"
+                    />
+                    <SortableHeader
+                      label="Q2"
+                      columnKey="q2"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="qt-col"
+                    />
+                    <SortableHeader
+                      label="Q3"
+                      columnKey="q3"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="qt-col"
+                    />
+                    <SortableHeader
+                      label="Q4"
+                      columnKey="q4"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="qt-col"
+                    />
+                    <SortableHeader
+                      label="OH"
+                      columnKey="oh"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                    />
+                    <SortableHeader
+                      label="WOS"
+                      columnKey="wos"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                    />
+                    <SortableHeader
+                      label="Total OFC"
+                      columnKey="totalOfc"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                      className="section-divider"
+                    />
+                    {weekColumns.map((w, i) => (
+                      <SortableHeader
+                        key={w}
+                        label={weekDisplayLabels[i] || w}
+                        columnKey={w}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        isNumeric={true}
+                        uniqueValues={[]}
+                        filterState={filterState}
+                        onFilterApply={setFilterState}
+                        className="week-cell"
+                      />
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortKey ? (
+                    // When sorting, show flat list (no category grouping)
+                    filtered.map((s) => (
+                      <DataRow
+                        key={s.sku}
+                        s={s}
+                        weekColumns={weekColumns}
+                        discrepancyMap={discrepancyMap}
+                        isDualMode={isDualMode}
+                        hasDiscrepancy={skuHasDiscrepancy(s.sku)}
+                        onAcceptRow={(dir) =>
+                          setConfirmModal({
+                            title: `Accept ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} Numbers for ${s.sku}`,
+                            message: `This will update the forecast for ${s.sku} to match ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} values.`,
+                            confirmLabel: 'Accept',
+                            confirmColor:
+                              dir === 'anker_accepts_c2'
+                                ? 'var(--orange)'
+                                : 'var(--anker-blue)',
+                            onConfirm: () => handleAccept(dir, 'sku', s.sku),
+                          })
+                        }
+                      />
+                    ))
+                  ) : (
+                    // Default: grouped by category
+                    CATEGORIES.map((cat) => {
+                      const items = filtered.filter((s) => s.category === cat);
+                      if (items.length === 0) return null;
 
-                  const catTotal = items.reduce(
-                    (s, r) => s + r.totalOfc,
-                    0
-                  );
+                      const catTotal = items.reduce((s, r) => s + r.totalOfc, 0);
 
-                  return [
-                    // Category header row
-                    <tr key={`cat-${cat}`} className="cat-row">
-                      <td colSpan={10 + weekColumns.length} style={{ textAlign: 'left' }}>
-                        ▸ {cat}{' '}
-                        <span
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.7,
-                            marginLeft: 10,
-                          }}
-                        >
-                          {items.length} SKUs · {catTotal.toLocaleString()} units
-                        </span>
-                      </td>
-                    </tr>,
-                    // Data rows
-                    ...items.map((s) => {
-                      const custClass =
-                        s.customer === 'C2 Wireless'
-                          ? 'cust-c2'
-                          : 'cust-vc';
-                      const custLabel =
-                        s.customer === 'C2 Wireless' ? 'C2W' : 'VC';
-                      const wosClass =
-                        s.wos >= 6
-                          ? 'wos-good'
-                          : s.wos >= 3
-                          ? 'wos-warn'
-                          : 'wos-danger';
-
-                      return (
-                        <tr key={s.sku}>
+                      return [
+                        <tr key={`cat-${cat}`} className="cat-row">
                           <td
-                            className="sticky-col col-sku"
-                            style={{ background: 'inherit' }}
-                            title={s.description}
+                            colSpan={10 + weekColumns.length}
+                            style={{ textAlign: 'left' }}
                           >
-                            {s.sku}
-                          </td>
-                          <td
-                            className="sticky-col col-cust"
-                            style={{ background: 'inherit' }}
-                          >
-                            <span className={`cust-badge ${custClass}`}>
-                              {custLabel}
+                            ▸ {cat}{' '}
+                            <span
+                              style={{
+                                fontSize: 12,
+                                opacity: 0.7,
+                                marginLeft: 10,
+                              }}
+                            >
+                              {items.length} SKUs ·{' '}
+                              {catTotal.toLocaleString()} units
                             </span>
                           </td>
-                          <td
-                            className="sticky-col col-price"
-                            style={{ background: 'inherit' }}
-                          >
-                            ${s.price.toFixed(2)}
-                          </td>
-                          <td className="qt-col">
-                            {s.q1.toLocaleString()}
-                          </td>
-                          <td className="qt-col">
-                            {s.q2.toLocaleString()}
-                          </td>
-                          <td className="qt-col">
-                            {s.q3.toLocaleString()}
-                          </td>
-                          <td className="qt-col">
-                            {s.q4.toLocaleString()}
-                          </td>
-                          <td>{s.oh.toLocaleString()}</td>
-                          <td className={wosClass}>{s.wos}</td>
-                          <td
-                            className="section-divider"
-                            style={{
-                              fontWeight: 700,
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            {s.totalOfc.toLocaleString()}
-                          </td>
-                          {weekColumns.map((w) => {
-                            const ankerVal = s.weeks[w] || 0;
-                            const discKey = `${s.sku}|${w}`;
-                            const c2Val = discrepancyMap.get(discKey);
-                            const hasDisc =
-                              c2Val !== undefined && c2Val !== ankerVal;
+                        </tr>,
+                        ...items.map((s) => (
+                          <DataRow
+                            key={s.sku}
+                            s={s}
+                            weekColumns={weekColumns}
+                            discrepancyMap={discrepancyMap}
+                            isDualMode={isDualMode}
+                            hasDiscrepancy={skuHasDiscrepancy(s.sku)}
+                            onAcceptRow={(dir) =>
+                              setConfirmModal({
+                                title: `Accept ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} Numbers for ${s.sku}`,
+                                message: `This will update the forecast for ${s.sku} to match ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} values.`,
+                                confirmLabel: 'Accept',
+                                confirmColor:
+                                  dir === 'anker_accepts_c2'
+                                    ? 'var(--orange)'
+                                    : 'var(--anker-blue)',
+                                onConfirm: () =>
+                                  handleAccept(dir, 'sku', s.sku),
+                              })
+                            }
+                          />
+                        )),
+                      ];
+                    })
+                  )}
 
-                            return (
-                              <td
-                                key={w}
-                                className={`week-cell editable ${
-                                  hasDisc
-                                    ? 'discrepancy-cell has-discrepancy'
-                                    : ''
-                                }`}
-                              >
-                                {hasDisc ? (
-                                  <div className="tooltip-container">
-                                    <span className="anker-val">
-                                      {ankerVal.toLocaleString()}
-                                    </span>
-                                    <br />
-                                    <span className="c2-val">
-                                      C2: {c2Val!.toLocaleString()}
-                                    </span>
-                                    <div className="tooltip">
-                                      Anker: {ankerVal.toLocaleString()} |
-                                      C2: {c2Val!.toLocaleString()} |
-                                      Diff:{' '}
-                                      {(
-                                        c2Val! - ankerVal
-                                      ).toLocaleString()}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  ankerVal.toLocaleString()
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    }),
-                  ];
-                })}
-
-                {/* Grand totals row */}
-                <tr className="totals-row">
-                  <td
-                    className="sticky-col col-sku"
-                    style={{
-                      background: 'rgba(0,169,224,0.15)',
-                    }}
-                  >
-                    TOTAL
-                  </td>
-                  <td
-                    className="sticky-col col-cust"
-                    style={{
-                      background: 'rgba(0,169,224,0.15)',
-                    }}
-                  />
-                  <td
-                    className="sticky-col col-price"
-                    style={{
-                      background: 'rgba(0,169,224,0.15)',
-                    }}
-                  />
-                  <td className="qt-col">
-                    {filterSkus(skus)
-                      .reduce((s, r) => s + r.q1, 0)
-                      .toLocaleString()}
-                  </td>
-                  <td className="qt-col">
-                    {filterSkus(skus)
-                      .reduce((s, r) => s + r.q2, 0)
-                      .toLocaleString()}
-                  </td>
-                  <td className="qt-col">
-                    {filterSkus(skus)
-                      .reduce((s, r) => s + r.q3, 0)
-                      .toLocaleString()}
-                  </td>
-                  <td className="qt-col">
-                    {filterSkus(skus)
-                      .reduce((s, r) => s + r.q4, 0)
-                      .toLocaleString()}
-                  </td>
-                  <td>
-                    {filterSkus(skus)
-                      .reduce((s, r) => s + r.oh, 0)
-                      .toLocaleString()}
-                  </td>
-                  <td />
-                  <td className="section-divider">
-                    {filterSkus(skus)
-                      .reduce((s, r) => s + r.totalOfc, 0)
-                      .toLocaleString()}
-                  </td>
-                  {weekColumns.map((w) => (
-                    <td key={w} className="week-cell">
-                      {filterSkus(skus)
-                        .reduce((s, r) => s + (r.weeks[w] || 0), 0)
+                  {/* Grand totals row */}
+                  <tr className="totals-row">
+                    <td className="sticky-col col-sku totals-sticky">TOTAL</td>
+                    <td className="sticky-col col-cust totals-sticky" />
+                    <td className="sticky-col col-price totals-sticky" />
+                    <td className="qt-col">
+                      {filtered.reduce((s, r) => s + r.q1, 0).toLocaleString()}
+                    </td>
+                    <td className="qt-col">
+                      {filtered.reduce((s, r) => s + r.q2, 0).toLocaleString()}
+                    </td>
+                    <td className="qt-col">
+                      {filtered.reduce((s, r) => s + r.q3, 0).toLocaleString()}
+                    </td>
+                    <td className="qt-col">
+                      {filtered.reduce((s, r) => s + r.q4, 0).toLocaleString()}
+                    </td>
+                    <td>
+                      {filtered.reduce((s, r) => s + r.oh, 0).toLocaleString()}
+                    </td>
+                    <td />
+                    <td className="section-divider">
+                      {filtered
+                        .reduce((s, r) => s + r.totalOfc, 0)
                         .toLocaleString()}
                     </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+                    {weekColumns.map((w) => (
+                      <td key={w} className="week-cell">
+                        {filtered
+                          .reduce((s, r) => s + (r.weeks[w] || 0), 0)
+                          .toLocaleString()}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -1033,7 +1584,25 @@ export default function Dashboard() {
       </div>
 
       {/* SETTINGS MODAL */}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          refreshInterval={refreshInterval}
+          onRefreshChange={handleRefreshChange}
+        />
+      )}
+
+      {/* CONFIRMATION MODAL */}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          confirmColor={confirmModal.confirmColor}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
 
       {/* TOAST */}
       {toast && (
@@ -1044,5 +1613,111 @@ export default function Dashboard() {
         />
       )}
     </>
+  );
+}
+
+// =============================================================================
+// DATA ROW COMPONENT (extracted for reuse in sorted/grouped modes)
+// =============================================================================
+function DataRow({
+  s,
+  weekColumns,
+  discrepancyMap,
+  isDualMode,
+  hasDiscrepancy,
+  onAcceptRow,
+}: {
+  s: SkuForecast;
+  weekColumns: string[];
+  discrepancyMap: Map<string, number>;
+  isDualMode: boolean;
+  hasDiscrepancy: boolean;
+  onAcceptRow: (direction: 'anker_accepts_c2' | 'c2_accepts_anker') => void;
+}) {
+  const custClass = s.customer === 'C2 Wireless' ? 'cust-c2' : 'cust-vc';
+  const custLabel = s.customer === 'C2 Wireless' ? 'C2W' : 'VC';
+  const wosClass =
+    s.wos >= 6 ? 'wos-good' : s.wos >= 3 ? 'wos-warn' : 'wos-danger';
+
+  return (
+    <tr>
+      <td className="sticky-col col-sku data-sticky" title={s.description}>
+        <div className="flex items-center gap-1.5">
+          <span>{s.sku}</span>
+          {isDualMode && hasDiscrepancy && (
+            <div className="row-accept-icons">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAcceptRow('anker_accepts_c2');
+                }}
+                className="row-accept-btn c2"
+                title="Accept C2's numbers for this SKU"
+              >
+                C2
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAcceptRow('c2_accepts_anker');
+                }}
+                className="row-accept-btn anker"
+                title="Accept Anker's numbers for this SKU"
+              >
+                AK
+              </button>
+            </div>
+          )}
+        </div>
+      </td>
+      <td className="sticky-col col-cust data-sticky">
+        <span className={`cust-badge ${custClass}`}>{custLabel}</span>
+      </td>
+      <td className="sticky-col col-price data-sticky">
+        ${s.price.toFixed(2)}
+      </td>
+      <td className="qt-col">{s.q1.toLocaleString()}</td>
+      <td className="qt-col">{s.q2.toLocaleString()}</td>
+      <td className="qt-col">{s.q3.toLocaleString()}</td>
+      <td className="qt-col">{s.q4.toLocaleString()}</td>
+      <td>{s.oh.toLocaleString()}</td>
+      <td className={wosClass}>{s.wos}</td>
+      <td
+        className="section-divider"
+        style={{ fontWeight: 700, color: 'var(--text-secondary)' }}
+      >
+        {s.totalOfc.toLocaleString()}
+      </td>
+      {weekColumns.map((w) => {
+        const ankerVal = s.weeks[w] || 0;
+        const discKey = `${s.sku}|${w}`;
+        const c2Val = discrepancyMap.get(discKey);
+        const hasDisc = c2Val !== undefined && c2Val !== ankerVal;
+
+        return (
+          <td
+            key={w}
+            className={`week-cell editable ${
+              hasDisc ? 'discrepancy-cell has-discrepancy' : ''
+            }`}
+          >
+            {hasDisc ? (
+              <div className="tooltip-container">
+                <span className="anker-val">{ankerVal.toLocaleString()}</span>
+                <br />
+                <span className="c2-val">C2: {c2Val!.toLocaleString()}</span>
+                <div className="tooltip">
+                  Anker: {ankerVal.toLocaleString()} | C2:{' '}
+                  {c2Val!.toLocaleString()} | Diff:{' '}
+                  {(c2Val! - ankerVal).toLocaleString()}
+                </div>
+              </div>
+            ) : (
+              ankerVal.toLocaleString()
+            )}
+          </td>
+        );
+      })}
+    </tr>
   );
 }

@@ -1,8 +1,10 @@
 // =============================================================================
-// Google Sheets API Wrapper
+// Google Sheets API Wrapper — Dynamic Column Mapping
 // =============================================================================
 // Reads forecast data from Google Sheets using a service account.
-// Falls back to hardcoded sample data when credentials aren't configured.
+// Column positions are discovered dynamically by matching header text,
+// NOT hardcoded indices. This means if columns are rearranged, inserted,
+// or renamed, the dashboard adapts automatically.
 
 import { google } from 'googleapis';
 import type { SkuForecast } from './types';
@@ -24,72 +26,154 @@ function getSheetsClient() {
 }
 
 // ---------------------------------------------------------------------------
-// CPFR Tab column mapping (row 5 is header, data starts row 6)
-// A=Q1, B=Q2, C=Q3, D=Q4, E=Price, F=PDT, G=Sellout avg, H=OH, I=WOS,
-// J=Total OFC, K-S=misc, T=Anker SKU (col index 19),
-// U onwards = weekly sell-in (202606, 202607, ...)
-// Q=Customer (col index 16)
+// Dynamic Column Discovery
 // ---------------------------------------------------------------------------
-const COL = {
-  Q1: 0,
-  Q2: 1,
-  Q3: 2,
-  Q4: 3,
-  PRICE: 4,
-  PDT: 5,
-  SELLOUT_AVG: 6,
-  OH: 7,
-  WOS: 8,
-  TOTAL_OFC: 9,
-  CUSTOMER: 16,
-  ANKER_SKU: 19,
-  WEEK_START: 20, // Column U onwards
+// Known column headers we look for (case-insensitive matching)
+const KNOWN_HEADERS: Record<string, string[]> = {
+  ANKER_SKU: ['Anker SKU', 'Anker_SKU', 'SKU', 'Anker Model'],
+  CUSTOMER: ['Customer', 'Cust', 'Account'],
+  PRICE: ['Price', 'Unit Price', 'Sell Price', 'ASP'],
+  PDT: ['PDT', 'Category', 'Product Type', 'Product Category'],
+  SELLOUT_AVG: ['Sellout avg', 'Sellout Avg', 'Sellout Average', 'Avg Sellout', 'Weekly Sellout'],
+  OH: ['OH', 'On Hand', 'On-Hand', 'Inventory', 'Current OH'],
+  WOS: ['WOS', 'Weeks of Supply', 'Weeks Supply', 'WoS'],
+  TOTAL_OFC: ['Total OFC', 'Total Forecast', 'OFC Total', 'Total'],
+  Q1: ['Q1', 'Q1 Total', 'Quarter 1'],
+  Q2: ['Q2', 'Q2 Total', 'Quarter 2'],
+  Q3: ['Q3', 'Q3 Total', 'Quarter 3'],
+  Q4: ['Q4', 'Q4 Total', 'Quarter 4'],
 };
 
-// Week column labels from the sheet (fiscal weeks)
-// We'll read them from the header row and map to W+0, W+1, etc.
+// Pattern for weekly columns: 6-digit fiscal week (YYYYWW) or W+N
+const WEEK_PATTERN = /^(\d{6})$|^W\+\d+$/;
+
+interface ColumnMap {
+  [key: string]: number; // header key → column index
+}
+
+interface WeekColumnInfo {
+  index: number;
+  label: string; // original header text (e.g., "202606")
+  weekKey: string; // normalized key for the frontend (e.g., "W+0")
+}
+
+function discoverColumns(headerRow: string[]): {
+  columnMap: ColumnMap;
+  weekColumns: WeekColumnInfo[];
+  rawHeaders: string[];
+  warnings: string[];
+} {
+  const columnMap: ColumnMap = {};
+  const weekColumns: WeekColumnInfo[] = [];
+  const warnings: string[] = [];
+  const rawHeaders = headerRow.map((h) => (h || '').toString().trim());
+
+  // Match known columns by header text (case-insensitive)
+  for (const [key, aliases] of Object.entries(KNOWN_HEADERS)) {
+    let found = false;
+    for (const alias of aliases) {
+      const idx = rawHeaders.findIndex(
+        (h) => h.toLowerCase() === alias.toLowerCase()
+      );
+      if (idx !== -1) {
+        columnMap[key] = idx;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      warnings.push(`Column "${key}" not found (looked for: ${aliases.join(', ')})`);
+    }
+  }
+
+  // Find weekly columns (6-digit fiscal week codes or W+N patterns)
+  for (let i = 0; i < rawHeaders.length; i++) {
+    const h = rawHeaders[i];
+    if (WEEK_PATTERN.test(h)) {
+      weekColumns.push({
+        index: i,
+        label: h,
+        weekKey: '', // will be assigned below
+      });
+    }
+  }
+
+  // Sort week columns by index (they should already be in order, but be safe)
+  weekColumns.sort((a, b) => a.index - b.index);
+
+  // Assign W+N keys
+  weekColumns.forEach((wc, i) => {
+    wc.weekKey = `W+${i}`;
+  });
+
+  if (weekColumns.length === 0) {
+    warnings.push('No weekly columns found (expected YYYYWW or W+N pattern headers)');
+  }
+
+  return { columnMap, weekColumns, rawHeaders, warnings };
+}
 
 function parseNumber(val: string | undefined): number {
   if (!val) return 0;
-  // Remove $, commas, and whitespace
   const cleaned = val.toString().replace(/[$,\s]/g, '');
   const n = parseFloat(cleaned);
   return isNaN(n) ? 0 : n;
 }
 
+function safeGet(row: string[], idx: number | undefined): string | undefined {
+  if (idx === undefined || idx < 0 || idx >= row.length) return undefined;
+  return row[idx];
+}
+
 // ---------------------------------------------------------------------------
-// Read CPFR data from a sheet
+// Read CPFR data from a sheet (dynamic column mapping)
 // ---------------------------------------------------------------------------
 export async function readCpfrSheet(
   sheetId: string,
-  tabName: string = 'CPFR'
-): Promise<{ data: SkuForecast[]; weekColumns: string[]; lastModified: string } | null> {
+  tabName: string = 'CPFR',
+  headerRowIndex: number = 4, // 0-indexed row for header (row 5 = index 4)
+  dataStartRow: number = 5 // 0-indexed row where data begins (row 6 = index 5)
+): Promise<{
+  data: SkuForecast[];
+  weekColumns: string[];
+  weekLabels: string[];
+  lastModified: string;
+  columnMapping: Record<string, number>;
+  warnings: string[];
+} | null> {
   const sheets = getSheetsClient();
   if (!sheets) return null;
 
   try {
-    // Read header row (row 5) to get week column labels
-    const headerRes = await sheets.spreadsheets.values.get({
+    // Read the entire range including header and data
+    const res = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range: `${tabName}!A5:CZ5`,
+      range: `${tabName}!A1:CZ500`,
     });
-    const headerRow = headerRes.data.values?.[0] || [];
+    const allRows = res.data.values || [];
 
-    // Extract week column labels (starting from col U = index 20)
-    const weekColumns: string[] = [];
-    for (let i = COL.WEEK_START; i < headerRow.length; i++) {
-      const label = headerRow[i]?.toString().trim();
-      if (label) {
-        weekColumns.push(label);
-      }
+    if (allRows.length <= headerRowIndex) {
+      console.warn(`[sheets] Sheet "${tabName}" has fewer rows than expected header row ${headerRowIndex + 1}`);
+      return null;
     }
 
-    // Read data rows (row 6 onwards)
-    const dataRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: `${tabName}!A6:CZ200`,
-    });
-    const rows = dataRes.data.values || [];
+    // Discover columns from header row
+    const headerRow = allRows[headerRowIndex] || [];
+    const { columnMap, weekColumns, warnings } = discoverColumns(
+      headerRow.map((v: string) => v?.toString() || '')
+    );
+
+    // Log warnings for debugging
+    for (const w of warnings) {
+      console.warn(`[sheets] ${w}`);
+    }
+
+    // Extract week column labels (original header text and W+N keys)
+    const weekLabels = weekColumns.map((wc) => wc.label);
+    const weekKeys = weekColumns.map((wc) => wc.weekKey);
+
+    // Read data rows
+    const dataRows = allRows.slice(dataStartRow);
 
     // Get last modified time from Drive API
     let lastModified = new Date().toISOString();
@@ -109,39 +193,48 @@ export async function readCpfrSheet(
 
     const data: SkuForecast[] = [];
 
-    for (const row of rows) {
-      const sku = row[COL.ANKER_SKU]?.toString().trim();
+    for (const row of dataRows) {
+      const sku = safeGet(row, columnMap.ANKER_SKU)?.trim();
       if (!sku) continue; // Skip empty rows
 
-      const customer = row[COL.CUSTOMER]?.toString().trim() || 'Unknown';
-      const category = row[COL.PDT]?.toString().trim() || 'Unknown';
+      const customer = safeGet(row, columnMap.CUSTOMER)?.trim() || 'Unknown';
+
+      // Filter: only C2 Wireless rows (skip VoiceComm)
+      if (customer.toLowerCase().includes('voicecomm')) continue;
+
+      const category = safeGet(row, columnMap.PDT)?.trim() || 'Unknown';
 
       // Build weekly forecast map
       const weeks: Record<string, number> = {};
-      for (let i = 0; i < weekColumns.length; i++) {
-        const colIdx = COL.WEEK_START + i;
-        const weekLabel = `W+${i}`;
-        weeks[weekLabel] = parseNumber(row[colIdx]);
+      for (const wc of weekColumns) {
+        weeks[wc.weekKey] = parseNumber(safeGet(row, wc.index));
       }
 
       data.push({
         sku,
         customer,
         category,
-        price: parseNumber(row[COL.PRICE]),
-        selloutAvg: parseNumber(row[COL.SELLOUT_AVG]),
-        oh: parseNumber(row[COL.OH]),
-        wos: parseNumber(row[COL.WOS]),
-        totalOfc: parseNumber(row[COL.TOTAL_OFC]),
-        q1: parseNumber(row[COL.Q1]),
-        q2: parseNumber(row[COL.Q2]),
-        q3: parseNumber(row[COL.Q3]),
-        q4: parseNumber(row[COL.Q4]),
+        price: parseNumber(safeGet(row, columnMap.PRICE)),
+        selloutAvg: parseNumber(safeGet(row, columnMap.SELLOUT_AVG)),
+        oh: parseNumber(safeGet(row, columnMap.OH)),
+        wos: parseNumber(safeGet(row, columnMap.WOS)),
+        totalOfc: parseNumber(safeGet(row, columnMap.TOTAL_OFC)),
+        q1: parseNumber(safeGet(row, columnMap.Q1)),
+        q2: parseNumber(safeGet(row, columnMap.Q2)),
+        q3: parseNumber(safeGet(row, columnMap.Q3)),
+        q4: parseNumber(safeGet(row, columnMap.Q4)),
         weeks,
       });
     }
 
-    return { data, weekColumns, lastModified };
+    return {
+      data,
+      weekColumns: weekKeys,
+      weekLabels,
+      lastModified,
+      columnMapping: columnMap,
+      warnings,
+    };
   } catch (err) {
     console.error('Error reading Google Sheet:', err);
     return null;

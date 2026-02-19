@@ -1,5 +1,5 @@
 // =============================================================================
-// GET /api/forecast — Fetch merged forecast data
+// GET /api/forecast — Fetch merged forecast data (dynamic column mapping)
 // =============================================================================
 
 import { NextResponse } from 'next/server';
@@ -17,21 +17,28 @@ export async function GET() {
       return NextResponse.json(fallback);
     }
 
-    // Read Anker's sheet
+    // Read Anker's mirror sheet
     const ankerSheetId = process.env.ANKER_SHEET_ID;
-    const ankerTab = process.env.ANKER_SHEET_TAB || 'CPFR';
+    const ankerTab = process.env.ANKER_SHEET_TAB || 'Sheet1';
 
     if (!ankerSheetId) {
       return NextResponse.json(getFallbackData());
     }
 
-    const ankerResult = await readCpfrSheet(ankerSheetId, ankerTab);
+    // Mirror sheet: header at row 5 (index 4), data starts row 6 (index 5)
+    const ankerResult = await readCpfrSheet(ankerSheetId, ankerTab, 4, 5);
 
     if (!ankerResult) {
-      // Sheets configured but failed to read — use fallback
       console.warn('[forecast] Failed to read Anker sheet, using fallback');
       return NextResponse.json(getFallbackData());
     }
+
+    // Log column mapping for debugging
+    if (ankerResult.warnings.length > 0) {
+      console.warn('[forecast] Column mapping warnings:', ankerResult.warnings);
+    }
+    console.log('[forecast] Discovered columns:', Object.keys(ankerResult.columnMapping));
+    console.log('[forecast] Found', ankerResult.weekColumns.length, 'weekly columns');
 
     // Build response
     const response: ForecastResponse = {
@@ -45,8 +52,11 @@ export async function GET() {
         totalSkus: ankerResult.data.length,
         totalUnits: ankerResult.data.reduce((s, r) => s + r.totalOfc, 0),
         categories: [...new Set(ankerResult.data.map((d) => d.category))],
-        weekColumns: ankerResult.weekColumns.map((_, i) => `W+${i}`),
+        weekColumns: ankerResult.weekColumns,
+        weekLabels: ankerResult.weekLabels,
         mode: 'single',
+        columnMapping: ankerResult.columnMapping,
+        warnings: ankerResult.warnings,
       },
     };
 
