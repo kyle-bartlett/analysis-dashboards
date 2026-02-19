@@ -1028,7 +1028,7 @@ export default function Dashboard() {
               className="text-4xl lg:text-[44px] font-extrabold tracking-tight"
               style={{ textShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
             >
-              C2W Charging CPFR
+              Anker-C2W Charging CPFR
             </h1>
             <p className="text-base lg:text-lg opacity-95 mt-1.5">
               Collaborative Planning, Forecasting &amp; Replenishment — 2026
