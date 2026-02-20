@@ -1244,7 +1244,7 @@ export default function Dashboard() {
                 disabled={accepting}
                 className="accept-btn accept-btn-c2 px-12 py-4 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {accepting ? '⏳ Processing...' : "✓ Accept C2's Numbers"}
+                {accepting ? '\u00A0\u00A0⏳ Processing...\u00A0\u00A0' : "\u00A0\u00A0✓ Accept C2's Numbers\u00A0\u00A0"}
               </button>
               <button
                 onClick={() =>
@@ -1260,7 +1260,7 @@ export default function Dashboard() {
                 disabled={accepting}
                 className="accept-btn accept-btn-anker px-12 py-4 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {accepting ? '⏳ Processing...' : "✓ Accept Anker's Numbers"}
+                {accepting ? '\u00A0\u00A0⏳ Processing...\u00A0\u00A0' : "\u00A0\u00A0✓ Accept Anker's Numbers\u00A0\u00A0"}
               </button>
             </div>
           </div>
@@ -1377,7 +1377,7 @@ export default function Dashboard() {
                     : 'bg-[rgba(0,169,224,0.1)] border-[rgba(0,169,224,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(0,169,224,0.25)] hover:border-[var(--anker-blue)]'
                 }`}
               >
-                {cat === 'all' ? 'All' : cat}
+                {cat === 'all' ? '\u00A0\u00A0All\u00A0\u00A0' : `\u00A0\u00A0${cat}\u00A0\u00A0`}
               </button>
             ))}
             <button
@@ -1388,7 +1388,7 @@ export default function Dashboard() {
                   : 'bg-[rgba(237,137,54,0.08)] border-[rgba(237,137,54,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(237,137,54,0.2)] hover:border-[var(--orange)]'
               }`}
             >
-              ⚡ {showDiscrepanciesOnly ? 'Discrepancies Only' : 'Show Discrepancies'}
+              {'\u00A0\u00A0⚡ '}{showDiscrepanciesOnly ? 'Discrepancies Only\u00A0\u00A0' : 'Show Discrepancies\u00A0\u00A0'}
               {discrepancyMap.size > 0 && (
                 <span className="ml-2 bg-[var(--orange)] text-white text-xs px-1.5 py-0.5 rounded-full">
                   {new Set([...discrepancyMap.keys()].map(k => k.split('|')[0])).size}
@@ -1400,7 +1400,7 @@ export default function Dashboard() {
                 onClick={scrollToCurrentWeek}
                 className="px-9 py-4 rounded-2xl border text-sm font-semibold cursor-pointer transition-all bg-[rgba(0,219,132,0.08)] border-[rgba(0,219,132,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(0,219,132,0.2)] hover:border-[var(--green)]"
               >
-                📍 This Week
+                {'\u00A0\u00A0📍 This Week\u00A0\u00A0'}
               </button>
             )}
           </div>
