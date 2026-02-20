@@ -1051,6 +1051,78 @@ export default function Dashboard() {
   }, [data, activeFilter, searchTerm, sortKey, sortDir, filterState, showDiscrepanciesOnly]);
 
   // ---------------------------------------------------------------------------
+  // CSV Export — exports current filtered/sorted view (⌘E / Ctrl+E)
+  // ---------------------------------------------------------------------------
+  const exportCSV = useCallback(() => {
+    if (!processedData || !data) return;
+    const { filtered: rows, weekColumns: wCols } = processedData;
+    const weekLabels = data.meta.weekLabels || wCols;
+
+    const headers = [
+      'Category', 'Anker SKU', 'Customer', 'Price',
+      'Q1', 'Q2', 'Q3', 'Q4',
+      'Sellout Avg', 'OH', 'WOS', 'Total OFC',
+      ...weekLabels,
+    ];
+
+    const csvRows = rows.map((s) => [
+      s.category, s.sku, s.customer, s.price.toFixed(2),
+      s.q1, s.q2, s.q3, s.q4,
+      s.selloutAvg, s.oh, s.wos, s.totalOfc,
+      ...wCols.map((w) => s.weeks[w] || 0),
+    ]);
+
+    const totals = [
+      '', 'TOTAL', '', '',
+      rows.reduce((s, r) => s + r.q1, 0),
+      rows.reduce((s, r) => s + r.q2, 0),
+      rows.reduce((s, r) => s + r.q3, 0),
+      rows.reduce((s, r) => s + r.q4, 0),
+      rows.reduce((s, r) => s + r.selloutAvg, 0),
+      rows.reduce((s, r) => s + r.oh, 0),
+      '',
+      rows.reduce((s, r) => s + r.totalOfc, 0),
+      ...wCols.map((w) => rows.reduce((s, r) => s + (r.weeks[w] || 0), 0)),
+    ];
+
+    const esc = (v: string | number) => {
+      const str = String(v);
+      return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? `"${str.replace(/"/g, '""')}"`
+        : str;
+    };
+
+    const csv = [
+      headers.map(esc).join(','),
+      ...csvRows.map((r) => r.map(esc).join(',')),
+      totals.map(esc).join(','),
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    const filterTag = activeFilter !== 'all' ? `-${activeFilter}` : '';
+    a.href = url;
+    a.download = `C2W-CPFR${filterTag}-${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast(`Exported ${rows.length} rows to CSV`, 'success');
+  }, [processedData, data, activeFilter]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        exportCSV();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [exportCSV]);
+
+  // ---------------------------------------------------------------------------
   // Loading state
   // ---------------------------------------------------------------------------
   if (loading || !data || !processedData) {
@@ -1403,6 +1475,13 @@ export default function Dashboard() {
                 {'\u00A0\u00A0📍 This Week\u00A0\u00A0'}
               </button>
             )}
+            <button
+              onClick={exportCSV}
+              className="px-9 py-4 rounded-2xl border text-sm font-semibold cursor-pointer transition-all bg-[rgba(0,169,224,0.08)] border-[rgba(0,169,224,0.2)] text-[var(--text-secondary)] hover:bg-[rgba(0,169,224,0.2)] hover:border-[var(--anker-blue)]"
+              title="Export current view to CSV (⌘E)"
+            >
+              {'\u00A0\u00A0📥 Export CSV\u00A0\u00A0'}
+            </button>
           </div>
 
           {/* Scroll hint */}
