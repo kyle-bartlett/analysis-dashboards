@@ -24,9 +24,9 @@
   --border-faint: rgba(255, 255, 255, 0.06);
   --row-bg: #1e2736;
   --row-bg-even: #212d3b;
-  --row-bg-hover: rgba(0, 169, 224, 0.08);
-  --cat-row-bg: rgba(0, 169, 224, 0.12);
-  --totals-row-bg: rgba(0, 169, 224, 0.15);
+  --row-bg-hover: #1c3048;
+  --cat-row-bg: #172a3d;
+  --totals-row-bg: #1a3349;
 }
 
 * {
