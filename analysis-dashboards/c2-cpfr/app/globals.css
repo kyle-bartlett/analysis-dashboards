@@ -832,6 +832,30 @@ tr:hover .row-accept-icons {
 }
 
 /* ============================================================
+   CURRENT WEEK COLUMN HIGHLIGHT
+   ============================================================ */
+.cpfr-table thead th.current-week-col {
+  background: rgba(0, 219, 132, 0.18) !important;
+  border-top: 3px solid var(--green);
+}
+
+.cpfr-table tbody td.current-week-col {
+  background: rgba(0, 219, 132, 0.06);
+}
+
+.cpfr-table tbody tr:nth-child(even) td.current-week-col {
+  background: rgba(0, 219, 132, 0.08);
+}
+
+.cpfr-table tbody tr:hover td.current-week-col {
+  background: rgba(0, 219, 132, 0.12);
+}
+
+.cpfr-table .totals-row td.current-week-col {
+  background: rgba(0, 219, 132, 0.14) !important;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 1200px) {

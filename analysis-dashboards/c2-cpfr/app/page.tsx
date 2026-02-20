@@ -22,6 +22,21 @@ const REFRESH_OPTIONS = [
 ];
 
 // =============================================================================
+// CURRENT FISCAL WEEK HELPER
+// =============================================================================
+function getCurrentFiscalWeek(): string {
+  const now = new Date();
+  // ISO week number calculation
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  const year = d.getUTCFullYear();
+  return `${year}${String(weekNum).padStart(2, '0')}`;
+}
+
+// =============================================================================
 // TOAST COMPONENT
 // =============================================================================
 function Toast({
@@ -428,6 +443,7 @@ function SortableHeader({
   onFilterApply,
   className,
   style,
+  ...rest
 }: {
   label: string;
   columnKey: string;
@@ -440,6 +456,7 @@ function SortableHeader({
   onFilterApply: (state: FilterState) => void;
   className?: string;
   style?: React.CSSProperties;
+  'data-week-index'?: number;
 }) {
   const [showFilter, setShowFilter] = useState(false);
 
@@ -449,7 +466,7 @@ function SortableHeader({
     : !!filterState.textFilters[columnKey];
 
   return (
-    <th className={className} style={style}>
+    <th className={className} style={style} {...rest}>
       <div className="th-inner">
         <button
           className="sort-btn cursor-pointer"
@@ -624,6 +641,8 @@ export default function Dashboard() {
   const chartWeeklyRef = useRef<HTMLCanvasElement>(null);
   const chartQuarterlyRef = useRef<HTMLCanvasElement>(null);
   const chartsInitialized = useRef(false);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolled = useRef(false);
 
   // ---------------------------------------------------------------------------
   // Data Fetching
@@ -837,6 +856,40 @@ export default function Dashboard() {
 
     loadCharts();
   }, [data]);
+
+  // ---------------------------------------------------------------------------
+  // Scroll to current week column
+  // ---------------------------------------------------------------------------
+  const currentFiscalWeek = useMemo(() => getCurrentFiscalWeek(), []);
+
+  const currentWeekIndex = useMemo(() => {
+    if (!data) return -1;
+    const labels = data.meta.weekLabels || data.meta.weekColumns;
+    return labels.findIndex((l) => l === currentFiscalWeek);
+  }, [data, currentFiscalWeek]);
+
+  const scrollToCurrentWeek = useCallback(() => {
+    const container = tableScrollRef.current;
+    if (!container || currentWeekIndex < 0) return;
+    // Find the th element with data-week-index matching
+    const th = container.querySelector(`th[data-week-index="${currentWeekIndex}"]`);
+    if (th) {
+      const containerRect = container.getBoundingClientRect();
+      const thRect = th.getBoundingClientRect();
+      // Scroll so the column is roughly centered in the visible area
+      const scrollLeft = thRect.left - containerRect.left + container.scrollLeft - containerRect.width / 2 + thRect.width / 2;
+      container.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
+    }
+  }, [currentWeekIndex]);
+
+  // Auto-scroll to current week on initial data load
+  useEffect(() => {
+    if (!data || hasAutoScrolled.current || currentWeekIndex < 0) return;
+    hasAutoScrolled.current = true;
+    // Brief delay to ensure table is rendered
+    const t = setTimeout(scrollToCurrentWeek, 600);
+    return () => clearTimeout(t);
+  }, [data, currentWeekIndex, scrollToCurrentWeek]);
 
   // ---------------------------------------------------------------------------
   // Sort handler (3-click cycle: asc → desc → reset)
@@ -1310,6 +1363,14 @@ export default function Dashboard() {
                 </span>
               )}
             </button>
+            {currentWeekIndex >= 0 && (
+              <button
+                onClick={scrollToCurrentWeek}
+                className="px-5 py-2.5 rounded-xl border text-sm font-semibold cursor-pointer transition-all bg-[rgba(0,219,132,0.08)] border-[rgba(0,219,132,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(0,219,132,0.2)] hover:border-[var(--green)]"
+              >
+                📍 This Week
+              </button>
+            )}
           </div>
 
           {/* Scroll hint */}
@@ -1324,7 +1385,7 @@ export default function Dashboard() {
           </div>
 
           {/* Table with independent scroll */}
-          <div className="table-scroll-container">
+          <div className="table-scroll-container" ref={tableScrollRef}>
             <div className="table-wrapper">
               <table className="cpfr-table">
                 <thead>
@@ -1459,7 +1520,8 @@ export default function Dashboard() {
                         uniqueValues={[]}
                         filterState={filterState}
                         onFilterApply={setFilterState}
-                        className="week-cell"
+                        className={`week-cell${i === currentWeekIndex ? ' current-week-col' : ''}`}
+                        data-week-index={i}
                       />
                     ))}
                   </tr>
@@ -1475,6 +1537,7 @@ export default function Dashboard() {
                         discrepancyMap={discrepancyMap}
                         isDualMode={isDualMode}
                         hasDiscrepancy={skuHasDiscrepancy(s.sku)}
+                        currentWeekIndex={currentWeekIndex}
                         onAcceptRow={(dir) =>
                           setConfirmModal({
                             title: `Accept ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} Numbers for ${s.sku}`,
@@ -1524,6 +1587,7 @@ export default function Dashboard() {
                             discrepancyMap={discrepancyMap}
                             isDualMode={isDualMode}
                             hasDiscrepancy={skuHasDiscrepancy(s.sku)}
+                            currentWeekIndex={currentWeekIndex}
                             onAcceptRow={(dir) =>
                               setConfirmModal({
                                 title: `Accept ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} Numbers for ${s.sku}`,
@@ -1569,8 +1633,8 @@ export default function Dashboard() {
                         .reduce((s, r) => s + r.totalOfc, 0)
                         .toLocaleString()}
                     </td>
-                    {weekColumns.map((w) => (
-                      <td key={w} className="week-cell">
+                    {weekColumns.map((w, i) => (
+                      <td key={w} className={`week-cell${i === currentWeekIndex ? ' current-week-col' : ''}`}>
                         {filtered
                           .reduce((s, r) => s + (r.weeks[w] || 0), 0)
                           .toLocaleString()}
@@ -1645,6 +1709,7 @@ function DataRow({
   isDualMode,
   hasDiscrepancy,
   onAcceptRow,
+  currentWeekIndex,
 }: {
   s: SkuForecast;
   weekColumns: string[];
@@ -1652,6 +1717,7 @@ function DataRow({
   isDualMode: boolean;
   hasDiscrepancy: boolean;
   onAcceptRow: (direction: 'anker_accepts_c2' | 'c2_accepts_anker') => void;
+  currentWeekIndex: number;
 }) {
   const custClass = s.customer === 'C2 Wireless' ? 'cust-c2' : 'cust-vc';
   const custLabel = s.customer === 'C2 Wireless' ? 'C2W' : 'VC';
@@ -1707,7 +1773,7 @@ function DataRow({
       >
         {s.totalOfc.toLocaleString()}
       </td>
-      {weekColumns.map((w) => {
+      {weekColumns.map((w, i) => {
         const ankerVal = s.weeks[w] || 0;
         const discKey = `${s.sku}|${w}`;
         const c2Val = discrepancyMap.get(discKey);
@@ -1718,7 +1784,7 @@ function DataRow({
             key={w}
             className={`week-cell editable ${
               hasDisc ? 'discrepancy-cell has-discrepancy' : ''
-            }`}
+            }${i === currentWeekIndex ? ' current-week-col' : ''}`}
           >
             {hasDisc ? (
               <div className="tooltip-container">
