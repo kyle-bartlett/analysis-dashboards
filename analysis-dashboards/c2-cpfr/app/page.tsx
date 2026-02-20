@@ -443,6 +443,7 @@ function SortableHeader({
   onFilterApply,
   className,
   style,
+  onResize,
   ...rest
 }: {
   label: string;
@@ -454,11 +455,41 @@ function SortableHeader({
   uniqueValues: string[];
   filterState: FilterState;
   onFilterApply: (state: FilterState) => void;
+  onResize?: (columnKey: string, width: number) => void;
   className?: string;
   style?: React.CSSProperties;
   'data-week-index'?: number;
 }) {
   const [showFilter, setShowFilter] = useState(false);
+  const thRef = useRef<HTMLTableCellElement>(null);
+
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!thRef.current || !onResize) return;
+      const startX = e.clientX;
+      const startWidth = thRef.current.offsetWidth;
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const newWidth = Math.max(50, startWidth + (ev.clientX - startX));
+        onResize(columnKey, newWidth);
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    },
+    [columnKey, onResize]
+  );
 
   const isActive = sortKey === columnKey;
   const hasFilter = isNumeric
@@ -466,7 +497,7 @@ function SortableHeader({
     : !!filterState.textFilters[columnKey];
 
   return (
-    <th className={className} style={style} {...rest}>
+    <th ref={thRef} className={className} style={style} {...rest}>
       <div className="th-inner">
         <button
           className="sort-btn cursor-pointer"
@@ -504,6 +535,12 @@ function SortableHeader({
           />
         )}
       </div>
+      {onResize && (
+        <div
+          className="col-resize-handle"
+          onMouseDown={handleResizeStart}
+        />
+      )}
     </th>
   );
 }
@@ -644,6 +681,12 @@ export default function Dashboard() {
   const chartsInitialized = useRef(false);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const hasAutoScrolled = useRef(false);
+
+  // Column widths for resizable columns
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const handleColResize = useCallback((columnKey: string, width: number) => {
+    setColWidths((prev) => ({ ...prev, [columnKey]: width }));
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Data Fetching
@@ -1402,7 +1445,9 @@ export default function Dashboard() {
                       uniqueValues={uniqueSkus}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="sticky-col col-sku"
+                      style={colWidths.sku ? { width: colWidths.sku, minWidth: colWidths.sku, maxWidth: colWidths.sku } : undefined}
                     />
                     <SortableHeader
                       label="Customer"
@@ -1414,7 +1459,9 @@ export default function Dashboard() {
                       uniqueValues={uniqueCustomers}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="sticky-col col-cust"
+                      style={colWidths.customer ? { width: colWidths.customer, minWidth: colWidths.customer, maxWidth: colWidths.customer, left: colWidths.sku || 160 } : undefined}
                     />
                     <SortableHeader
                       label="Price"
@@ -1426,7 +1473,9 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="sticky-col col-price"
+                      style={colWidths.price ? { width: colWidths.price, minWidth: colWidths.price, maxWidth: colWidths.price, left: (colWidths.sku || 160) + (colWidths.customer || 90) } : undefined}
                     />
                     <SortableHeader
                       label="Q1"
@@ -1438,7 +1487,9 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="qt-col"
+                      style={colWidths.q1 ? { width: colWidths.q1 } : undefined}
                     />
                     <SortableHeader
                       label="Q2"
@@ -1450,7 +1501,9 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="qt-col"
+                      style={colWidths.q2 ? { width: colWidths.q2 } : undefined}
                     />
                     <SortableHeader
                       label="Q3"
@@ -1462,7 +1515,9 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="qt-col"
+                      style={colWidths.q3 ? { width: colWidths.q3 } : undefined}
                     />
                     <SortableHeader
                       label="Q4"
@@ -1474,7 +1529,9 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="qt-col"
+                      style={colWidths.q4 ? { width: colWidths.q4 } : undefined}
                     />
                     <SortableHeader
                       label="Sellout Avg"
@@ -1486,6 +1543,8 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
+                      style={colWidths.selloutAvg ? { width: colWidths.selloutAvg } : undefined}
                     />
                     <SortableHeader
                       label="OH"
@@ -1497,6 +1556,8 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
+                      style={colWidths.oh ? { width: colWidths.oh } : undefined}
                     />
                     <SortableHeader
                       label="WOS"
@@ -1508,6 +1569,8 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
+                      style={colWidths.wos ? { width: colWidths.wos } : undefined}
                     />
                     <SortableHeader
                       label="Total OFC"
@@ -1519,7 +1582,9 @@ export default function Dashboard() {
                       uniqueValues={[]}
                       filterState={filterState}
                       onFilterApply={setFilterState}
+                      onResize={handleColResize}
                       className="section-divider"
+                      style={colWidths.totalOfc ? { width: colWidths.totalOfc } : undefined}
                     />
                     {weekColumns.map((w, i) => (
                       <SortableHeader
@@ -1533,7 +1598,9 @@ export default function Dashboard() {
                         uniqueValues={[]}
                         filterState={filterState}
                         onFilterApply={setFilterState}
+                        onResize={handleColResize}
                         className={`week-cell${i === currentWeekIndex ? ' current-week-col' : ''}`}
+                        style={colWidths[w] ? { width: colWidths[w] } : undefined}
                         data-week-index={i}
                       />
                     ))}
@@ -1626,9 +1693,9 @@ export default function Dashboard() {
 
                   {/* Grand totals row */}
                   <tr className="totals-row">
-                    <td className="sticky-col col-sku totals-sticky">TOTAL</td>
-                    <td className="sticky-col col-cust totals-sticky" />
-                    <td className="sticky-col col-price totals-sticky" />
+                    <td className="sticky-col col-sku totals-sticky" style={colWidths.sku ? { width: colWidths.sku, minWidth: colWidths.sku, maxWidth: colWidths.sku } : undefined}>TOTAL</td>
+                    <td className="sticky-col col-cust totals-sticky" style={colWidths.customer ? { width: colWidths.customer, minWidth: colWidths.customer, maxWidth: colWidths.customer, left: colWidths.sku || 160 } : undefined} />
+                    <td className="sticky-col col-price totals-sticky" style={colWidths.price ? { width: colWidths.price, minWidth: colWidths.price, maxWidth: colWidths.price, left: (colWidths.sku || 160) + (colWidths.customer || 90) } : undefined} />
                     <td className="qt-col">
                       {filtered.reduce((s, r) => s + r.q1, 0).toLocaleString()}
                     </td>
@@ -1640,6 +1707,9 @@ export default function Dashboard() {
                     </td>
                     <td className="qt-col">
                       {filtered.reduce((s, r) => s + r.q4, 0).toLocaleString()}
+                    </td>
+                    <td>
+                      {filtered.reduce((s, r) => s + r.selloutAvg, 0).toLocaleString()}
                     </td>
                     <td>
                       {filtered.reduce((s, r) => s + r.oh, 0).toLocaleString()}
