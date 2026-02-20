@@ -516,8 +516,15 @@ body {
   position: sticky;
   left: 0;
   z-index: 5;
-  background: var(--cat-row-bg) !important;
+  /* Opaque background so scrolling content doesn't bleed through */
+  background: #172a3d !important;
   min-width: 325px;
+  border-bottom: 2px solid rgba(0, 169, 224, 0.3);
+}
+
+/* Hide the border on the non-sticky td so it doesn't double up */
+.cpfr-table .cat-row td:not(.cat-sticky) {
+  border-bottom-color: transparent;
 }
 
 /* Grand total row */
