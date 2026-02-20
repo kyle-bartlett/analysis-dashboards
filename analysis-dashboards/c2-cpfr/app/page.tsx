@@ -1576,8 +1576,9 @@ export default function Dashboard() {
                       return [
                         <tr key={`cat-${cat}`} className="cat-row">
                           <td
-                            colSpan={10 + weekColumns.length}
-                            style={{ textAlign: 'left' }}
+                            className="sticky-col col-sku cat-sticky"
+                            colSpan={3}
+                            style={{ textAlign: 'left', left: 0 }}
                           >
                             ▸ {cat}{' '}
                             <span
@@ -1587,10 +1588,13 @@ export default function Dashboard() {
                                 marginLeft: 10,
                               }}
                             >
-                              {items.length} SKUs ·{' '}
+                              {items.length} SKU{items.length > 1 ? 's' : ''} ·{' '}
                               {catTotal.toLocaleString()} units
                             </span>
                           </td>
+                          <td
+                            colSpan={7 + weekColumns.length}
+                          />
                         </tr>,
                         ...items.map((s) => (
                           <DataRow

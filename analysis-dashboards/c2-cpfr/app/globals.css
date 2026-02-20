@@ -492,6 +492,15 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* Category row sticky — stays pinned when scrolling right */
+.cpfr-table .cat-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--cat-row-bg) !important;
+  min-width: 325px;
+}
+
 /* Grand total row */
 .cpfr-table .totals-row td {
   background: var(--totals-row-bg) !important;
