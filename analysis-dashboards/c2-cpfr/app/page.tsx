@@ -828,7 +828,7 @@ export default function Dashboard() {
                   bodyColor: '#cbd5e0',
                   callbacks: {
                     label: (ctx: { dataset: { label: string }; parsed: { y: number } }) =>
-                      `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} units`,
+                      `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`,
                   },
                 },
               },
@@ -841,7 +841,7 @@ export default function Dashboard() {
                   ticks: {
                     color: '#4a5568',
                     callback: (v: number) =>
-                      v >= 1000 ? v / 1000 + 'K' : v,
+                      v >= 1000 ? '$' + v / 1000 + 'K' : '$' + v,
                   },
                   grid: { color: 'rgba(255,255,255,0.06)' },
                 },
@@ -1273,6 +1273,7 @@ export default function Dashboard() {
         </div>
 
         {/* CATEGORY BREAKDOWN */}
+        <h3 className="text-lg font-bold text-[var(--text-muted)] mb-3">Total Forecast Units by Category (OFC)</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-9">
           {CATEGORIES.map((cat) => {
             const items = skus.filter((s) => s.category === cat);
@@ -1312,7 +1313,7 @@ export default function Dashboard() {
           </div>
           <div className="card" style={{ padding: 25 }}>
             <h3 className="text-2xl font-bold text-[var(--anker-blue)] mb-4">
-              Quarterly Sell-Through Distribution
+              Quarterly Sell-Through Revenue ($)
             </h3>
             <div className="relative h-[280px]">
               <canvas ref={chartQuarterlyRef} />
