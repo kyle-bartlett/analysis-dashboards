@@ -589,6 +589,7 @@ function getSortValue(
     case 'q2': return sku.q2;
     case 'q3': return sku.q3;
     case 'q4': return sku.q4;
+    case 'selloutAvg': return sku.selloutAvg;
     case 'oh': return sku.oh;
     case 'wos': return sku.wos;
     case 'totalOfc': return sku.totalOfc;
@@ -1476,6 +1477,17 @@ export default function Dashboard() {
                       className="qt-col"
                     />
                     <SortableHeader
+                      label="Sellout Avg"
+                      columnKey="selloutAvg"
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      isNumeric={true}
+                      uniqueValues={[]}
+                      filterState={filterState}
+                      onFilterApply={setFilterState}
+                    />
+                    <SortableHeader
                       label="OH"
                       columnKey="oh"
                       sortKey={sortKey}
@@ -1766,6 +1778,7 @@ function DataRow({
       <td className="qt-col">{s.q2.toLocaleString()}</td>
       <td className="qt-col">{s.q3.toLocaleString()}</td>
       <td className="qt-col">{s.q4.toLocaleString()}</td>
+      <td>{s.selloutAvg.toLocaleString()}</td>
       <td>{s.oh.toLocaleString()}</td>
       <td className={wosClass}>{s.wos}</td>
       <td
