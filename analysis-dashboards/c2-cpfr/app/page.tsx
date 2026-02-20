@@ -1156,7 +1156,7 @@ export default function Dashboard() {
       </div>
 
       {/* DASHBOARD */}
-      <div className="max-w-[1800px] mx-auto px-5 lg:px-[60px] py-10">
+      <div className="max-w-[1800px] mx-auto px-8 lg:px-[60px] py-10">
         {/* LAST UPDATED PANEL */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-9">
           <div className="update-card anker">
@@ -1304,8 +1304,8 @@ export default function Dashboard() {
         </div>
 
         {/* CATEGORY BREAKDOWN */}
-        <h3 className="text-lg font-bold text-[var(--text-muted)] mb-3 ml-2">Total Forecast Units by Category (OFC)</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-14 ml-2">
+        <h3 className="text-lg font-bold text-[var(--text-muted)] mb-4 ml-4 lg:ml-0">Total Forecast Units by Category (OFC)</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-16 mx-4 lg:mx-0">
           {CATEGORIES.map((cat) => {
             const items = skus.filter((s) => s.category === cat);
             const units = items.reduce((s, r) => s + r.totalOfc, 0);
