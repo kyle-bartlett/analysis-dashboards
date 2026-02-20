@@ -1304,8 +1304,8 @@ export default function Dashboard() {
         </div>
 
         {/* CATEGORY BREAKDOWN */}
-        <h3 className="text-lg font-bold text-[var(--text-muted)] mb-3">Total Forecast Units by Category (OFC)</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-9">
+        <h3 className="text-lg font-bold text-[var(--text-muted)] mb-3 ml-2">Total Forecast Units by Category (OFC)</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-14 ml-2">
           {CATEGORIES.map((cat) => {
             const items = skus.filter((s) => s.category === cat);
             const units = items.reduce((s, r) => s + r.totalOfc, 0);

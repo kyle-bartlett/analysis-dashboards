@@ -49,7 +49,9 @@ body {
   background: var(--anker-blue);
   padding: 40px 60px;
   box-shadow: 0 10px 40px rgba(0, 169, 224, 0.3);
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 50;
   overflow: hidden;
 }
 
