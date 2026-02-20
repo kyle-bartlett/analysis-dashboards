@@ -83,7 +83,7 @@ function ConfirmModal({
           </button>
           <button
             onClick={onConfirm}
-            className="accept-btn px-6 py-2.5 rounded-xl text-white text-sm font-bold cursor-pointer"
+            className="accept-btn px-10 py-3.5 rounded-xl text-white text-sm font-bold cursor-pointer"
             style={{ background: confirmColor }}
           >
             {confirmLabel}
@@ -1242,7 +1242,7 @@ export default function Dashboard() {
                   })
                 }
                 disabled={accepting}
-                className="accept-btn accept-btn-c2 px-8 py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="accept-btn accept-btn-c2 px-12 py-4 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {accepting ? '⏳ Processing...' : "✓ Accept C2's Numbers"}
               </button>
@@ -1258,7 +1258,7 @@ export default function Dashboard() {
                   })
                 }
                 disabled={accepting}
-                className="accept-btn accept-btn-anker px-8 py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="accept-btn accept-btn-anker px-12 py-4 rounded-xl text-white font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {accepting ? '⏳ Processing...' : "✓ Accept Anker's Numbers"}
               </button>
@@ -1266,7 +1266,7 @@ export default function Dashboard() {
           </div>
 
         {/* KPI CARDS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-12 mx-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-12 mx-8">
           {[
             {
               val: totalSkus.toString(),
@@ -1304,8 +1304,8 @@ export default function Dashboard() {
         </div>
 
         {/* CATEGORY BREAKDOWN */}
-        <h3 className="text-lg font-bold text-[var(--text-muted)] mt-6 mb-5 ml-3">Total Forecast Units by Category (OFC)</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-16 mx-3">
+        <h3 className="text-lg font-bold text-[var(--text-muted)] mt-8 mb-5 ml-8">Total Forecast Units by Category (OFC)</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-16 mx-8">
           {CATEGORIES.map((cat) => {
             const items = skus.filter((s) => s.category === cat);
             const units = items.reduce((s, r) => s + r.totalOfc, 0);
@@ -1371,7 +1371,7 @@ export default function Dashboard() {
               <button
                 key={cat}
                 onClick={() => setActiveFilter(cat)}
-                className={`px-7 py-3 rounded-xl border text-sm font-semibold cursor-pointer transition-all ${
+                className={`px-9 py-4 rounded-2xl border text-sm font-semibold cursor-pointer transition-all ${
                   activeFilter === cat
                     ? 'bg-[rgba(0,169,224,0.25)] border-[var(--anker-blue)] text-[var(--anker-blue)]'
                     : 'bg-[rgba(0,169,224,0.1)] border-[rgba(0,169,224,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(0,169,224,0.25)] hover:border-[var(--anker-blue)]'
@@ -1382,7 +1382,7 @@ export default function Dashboard() {
             ))}
             <button
               onClick={() => setShowDiscrepanciesOnly(!showDiscrepanciesOnly)}
-              className={`px-7 py-3 rounded-xl border text-sm font-semibold cursor-pointer transition-all ${
+              className={`px-9 py-4 rounded-2xl border text-sm font-semibold cursor-pointer transition-all ${
                 showDiscrepanciesOnly
                   ? 'bg-[rgba(237,137,54,0.25)] border-[var(--orange)] text-[var(--orange)]'
                   : 'bg-[rgba(237,137,54,0.08)] border-[rgba(237,137,54,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(237,137,54,0.2)] hover:border-[var(--orange)]'
@@ -1398,7 +1398,7 @@ export default function Dashboard() {
             {currentWeekIndex >= 0 && (
               <button
                 onClick={scrollToCurrentWeek}
-                className="px-7 py-3 rounded-xl border text-sm font-semibold cursor-pointer transition-all bg-[rgba(0,219,132,0.08)] border-[rgba(0,219,132,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(0,219,132,0.2)] hover:border-[var(--green)]"
+                className="px-9 py-4 rounded-2xl border text-sm font-semibold cursor-pointer transition-all bg-[rgba(0,219,132,0.08)] border-[rgba(0,219,132,0.3)] text-[var(--text-secondary)] hover:bg-[rgba(0,219,132,0.2)] hover:border-[var(--green)]"
               >
                 📍 This Week
               </button>
