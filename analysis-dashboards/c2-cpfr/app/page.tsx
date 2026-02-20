@@ -24,18 +24,6 @@ const REFRESH_OPTIONS = [
 // =============================================================================
 // CURRENT FISCAL WEEK HELPER
 // =============================================================================
-function getCurrentFiscalWeek(): string {
-  const now = new Date();
-  // ISO week number calculation
-  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  const year = d.getUTCFullYear();
-  return `${year}${String(weekNum).padStart(2, '0')}`;
-}
-
 // =============================================================================
 // TOAST COMPONENT
 // =============================================================================
@@ -904,13 +892,12 @@ export default function Dashboard() {
   // ---------------------------------------------------------------------------
   // Scroll to current week column
   // ---------------------------------------------------------------------------
-  const currentFiscalWeek = useMemo(() => getCurrentFiscalWeek(), []);
-
+  // Current week is always the first week column in the CPFR sheet
   const currentWeekIndex = useMemo(() => {
     if (!data) return -1;
-    const labels = data.meta.weekLabels || data.meta.weekColumns;
-    return labels.findIndex((l) => l === currentFiscalWeek);
-  }, [data, currentFiscalWeek]);
+    const cols = data.meta.weekColumns;
+    return cols.length > 0 ? 0 : -1;
+  }, [data]);
 
   const scrollToCurrentWeek = useCallback(() => {
     const container = tableScrollRef.current;
@@ -1607,33 +1594,8 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortKey ? (
-                    // When sorting, show flat list (no category grouping)
-                    filtered.map((s) => (
-                      <DataRow
-                        key={s.sku}
-                        s={s}
-                        weekColumns={weekColumns}
-                        discrepancyMap={discrepancyMap}
-                        isDualMode={isDualMode}
-                        hasDiscrepancy={skuHasDiscrepancy(s.sku)}
-                        currentWeekIndex={currentWeekIndex}
-                        onAcceptRow={(dir) =>
-                          setConfirmModal({
-                            title: `Accept ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} Numbers for ${s.sku}`,
-                            message: `This will update the forecast for ${s.sku} to match ${dir === 'anker_accepts_c2' ? "C2's" : "Anker's"} values.`,
-                            confirmLabel: 'Accept',
-                            confirmColor:
-                              dir === 'anker_accepts_c2'
-                                ? 'var(--orange)'
-                                : 'var(--anker-blue)',
-                            onConfirm: () => handleAccept(dir, 'sku', s.sku),
-                          })
-                        }
-                      />
-                    ))
-                  ) : (
-                    // Default: grouped by category
+                  {
+                    // Always grouped by category — sort applies within each group
                     CATEGORIES.map((cat) => {
                       const items = filtered.filter((s) => s.category === cat);
                       if (items.length === 0) return null;
@@ -1689,7 +1651,7 @@ export default function Dashboard() {
                         )),
                       ];
                     })
-                  )}
+                  }
 
                   {/* Grand totals row */}
                   <tr className="totals-row">
