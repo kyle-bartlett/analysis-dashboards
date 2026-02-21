@@ -585,6 +585,132 @@ function ChangeLogSection({ entries }: { entries: ChangeLogEntry[] }) {
 }
 
 // =============================================================================
+// INVENTORY RISK ALERTS PANEL
+// =============================================================================
+interface RiskItem {
+  sku: string;
+  category: string;
+  oh: number;
+  wos: number;
+  selloutAvg: number;
+  weeksRemaining: number;
+  stockoutDate: string;
+}
+
+function RiskAlertsPanel({ skus }: { skus: SkuForecast[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const { lowStock, watchList, overstock } = useMemo(() => {
+    const low: RiskItem[] = [];
+    const watch: RiskItem[] = [];
+    const over: RiskItem[] = [];
+
+    for (const s of skus) {
+      const weeksRemaining = s.selloutAvg > 0 ? s.oh / s.selloutAvg : s.oh > 0 ? 999 : 0;
+      const stockoutDate = weeksRemaining < 999 && weeksRemaining > 0
+        ? new Date(Date.now() + weeksRemaining * 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : weeksRemaining >= 999 ? 'N/A' : 'Now';
+
+      const item: RiskItem = { sku: s.sku, category: s.category, oh: s.oh, wos: s.wos, selloutAvg: s.selloutAvg, weeksRemaining, stockoutDate };
+
+      if (s.wos < 3) low.push(item);
+      else if (s.wos <= 4) watch.push(item);
+      else if (s.wos > 12) over.push(item);
+    }
+
+    // Sort low stock by WOS ascending (most urgent first)
+    low.sort((a, b) => a.wos - b.wos);
+    watch.sort((a, b) => a.wos - b.wos);
+    over.sort((a, b) => b.wos - a.wos);
+
+    return { lowStock: low, watchList: watch, overstock: over };
+  }, [skus]);
+
+  const totalAlerts = lowStock.length + watchList.length + overstock.length;
+  const isHealthy = totalAlerts === 0;
+
+  return (
+    <div className="card" style={{ padding: '16px 24px', marginBottom: 0 }}>
+      <button
+        onClick={() => !isHealthy && setExpanded(!expanded)}
+        className="w-full flex items-center justify-between text-left cursor-pointer"
+        style={{ cursor: isHealthy ? 'default' : 'pointer' }}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-lg font-bold text-[var(--anker-blue)]">
+            {isHealthy ? '✅' : '⚠️'} Inventory Risk
+          </span>
+          {isHealthy ? (
+            <span className="text-sm text-[var(--green)] font-semibold">All SKUs healthy</span>
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              {lowStock.length > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+                  🔴 {lowStock.length} low
+                </span>
+              )}
+              {watchList.length > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(234,179,8,0.15)', color: '#eab308' }}>
+                  🟡 {watchList.length} watch
+                </span>
+              )}
+              {overstock.length > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}>
+                  🔵 {overstock.length} overstock
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+        {!isHealthy && (
+          <span className="text-[var(--text-dim)] text-xs">
+            {expanded ? '▾ Collapse' : '▸ Expand'}
+          </span>
+        )}
+      </button>
+
+      {expanded && !isHealthy && (
+        <div className="mt-4 space-y-3">
+          {lowStock.length > 0 && (
+            <RiskGroup label="Low Stock Risk" emoji="🔴" color="#ef4444" items={lowStock} />
+          )}
+          {watchList.length > 0 && (
+            <RiskGroup label="Watch List" emoji="🟡" color="#eab308" items={watchList} />
+          )}
+          {overstock.length > 0 && (
+            <RiskGroup label="Overstock Risk" emoji="🔵" color="#3b82f6" items={overstock} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RiskGroup({ label, emoji, color, items }: { label: string; emoji: string; color: string; items: RiskItem[] }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color }}>
+        {emoji} {label}
+      </div>
+      <div className="space-y-1">
+        {items.map((item) => (
+          <div key={item.sku} className="flex items-center gap-4 text-xs py-1 px-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <span className="font-semibold text-[var(--text-secondary)] w-[180px] truncate">{item.sku}</span>
+            <span className="text-[var(--text-dim)] w-[70px]">{item.category}</span>
+            <span className="text-[var(--text-muted)] w-[80px]">OH: {item.oh.toLocaleString()}</span>
+            <span className="text-[var(--text-muted)] w-[70px]">WOS: {item.wos}</span>
+            <span className="text-[var(--text-muted)] w-[90px]">Avg: {item.selloutAvg.toLocaleString()}/wk</span>
+            <span className="text-[var(--text-dim)]" style={{ color: item.wos < 3 ? '#ef4444' : undefined }}>
+              {item.wos < 3 ? `⏰ Stockout ~${item.stockoutDate}` : item.wos > 12 ? `${Math.round(item.weeksRemaining)}wk supply` : `~${item.stockoutDate}`}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // HELPER: Get unique values for a column across all skus
 // =============================================================================
 function getUniqueValues(
@@ -1373,6 +1499,11 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* INVENTORY RISK ALERTS */}
+        <div className="mx-8 mb-6">
+          <RiskAlertsPanel skus={skus} />
         </div>
 
         {/* CATEGORY BREAKDOWN */}
